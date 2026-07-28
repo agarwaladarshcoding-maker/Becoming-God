@@ -35,9 +35,9 @@ if git diff --cached --quiet; then
   fi
   git commit -m "Daily check-in: no new changes"
 else
-  changed_files="$(git diff --cached --name-status | awk '{print $2}' | tr '\n' ' ')"
+  changed_files="$(git diff --cached --name-only | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')"
   echo "Changes detected in: $changed_files"
-  git commit -m "Daily update: $(date '+%Y-%m-%d') changes to $changed_files"
+  git commit -m "Daily update ($(date '+%Y-%m-%d')): $changed_files"
 fi
 
 git push origin main
