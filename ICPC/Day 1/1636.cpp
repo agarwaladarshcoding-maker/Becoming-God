@@ -18,20 +18,12 @@ int main() {
         cin >> coins[i];
     }
     
-    // Sorting helps conceptually group smaller coins first, 
-    // though the DP math works regardless of the input order.
     sort(coins.begin(), coins.end());
-
-    // Create a 2D DP table: (n + 1) rows and (x + 1) columns
-    // Initialize with 0s.
     vector<vector<int>> dp(n + 1, vector<int>(x + 1, 0));
-
-    // Base Case: 1 way to make sum 0 for any subset of coins
     for (int i = 0; i <= n; i++) {
         dp[i][0] = 1;
     }
 
-    // Iterate through coins (1 to n)
     for (int i = 1; i <= n; i++) {
         int current_coin = coins[i - 1]; // 0-indexed in the vector
         
