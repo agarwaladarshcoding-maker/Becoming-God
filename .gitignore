@@ -1,2 +1,13 @@
 scripts/daily_push.log
 scripts/daily_push.launchd.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.ipynb_checkpoints/
+
+# Editors
+.vscode/
+.DS_Store
