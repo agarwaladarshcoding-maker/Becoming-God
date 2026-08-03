@@ -1,9 +1,9 @@
 from client import call
 class Conversation:
     def __init__(self, system=None):
-        self.messages = []   # the ONLY memory in this system
+        self.messages = []  
         self.system = system
-        self.turns = []      # (turn_no, prompt_tokens, completion_tokens)
+        self.turns = []
 
     def say(self, text):
         # 1. append {"role": "user", "content": text} to self.messages
