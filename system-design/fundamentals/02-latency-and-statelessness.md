@@ -1,13 +1,14 @@
 Latency table
-L1 = 1ns
-main memory = 100ns, 
-1MB from RAM = 742ns
-SSD random read = 16us 
-1MB from SSD = 12us
-same-DC RTT  = 500us
-disk seek = 2ms 
-Mumbai→Singapore RTT = 
-Mumbai→US-East RTT = 
+
+1. L1 = 1ns
+2. main memory = 100ns, 
+3. 1MB from RAM = 742ns
+4. SSD random read = 16us 
+5. 1MB from SSD = 12us
+6. Same-DC RTT  = 500us
+7. disk seek = 2ms 
+8. Mumbai→Singapore RTT = 
+9.  Mumbai→US-East RTT = 
 
 You have excellent intuition for this. You accurately identified the core problems—network latency, single points of failure, and the complexity of keeping everything synchronized.
 

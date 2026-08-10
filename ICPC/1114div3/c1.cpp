@@ -13,14 +13,9 @@ using namespace std;
 #define fast_io ios_base::sync_with_stdio(false); cin.tie(NULL); cout.tie(NULL)
 
 void solve() {
-    long long stick;
-    long long diamond;
-    cin>>stick>>diamond;
-    long long ogS = stick;
-    long long ogD = diamond;
-    long long total = 0;
-    long long greater = max(stick , diamond);
-    long long smaller = min(stick, diamond);
+    long long n;
+    string s;
+    cin>>n>>s;
     
 }
 
