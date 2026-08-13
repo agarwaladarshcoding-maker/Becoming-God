@@ -1,0 +1,50 @@
+questions:
+  - id: 1
+    question: "How does RAG mitigate hallucinations in large language models?"
+    source_file: "doc_01_rag_architecture.pdf"
+    gold_snippet: "Retrieval-Augmented Generation (RAG) merges parametric knowledge from large language models with non-parametric knowledge from external document stores. By querying external indexes, RAG mitigates hallucinations and enables real-time domain adaptation without expensive fine-tuning."
+
+  - id: 2
+    question: "What search time complexity does the HNSW graph index achieve?"
+    source_file: "doc_02_vector_indexing.pdf"
+    gold_snippet: "HNSW achieves logarithmic search time complexity O(log N) while maintaining over 95% recall on high-dimensional vector spaces."
+
+  - id: 3
+    question: "How are extracted knowledge triples stored in Graph RAG?"
+    source_file: "doc_03_graph_reasoning.pdf"
+    gold_snippet: "Extracted knowledge triples are stored in graph databases like Neo4j or NetworkX for relational query execution."
+
+  - id: 4
+    question: "What is the exact mathematical formula for Reciprocal Rank Fusion?"
+    source_file: "doc_04_reciprocal_rank_fusion.pdf"
+    gold_snippet: "RRF calculates a final score for each document using the sum of reciprocal ranks: RRF_score(d) = sum(1 / (k + r_i(d))), where k is a constant parameter (typically 60) and r_i(d) is document d's rank in retriever i."
+
+  - id: 5
+    question: "Why are tree-sitter or AST parsers preferred over character chunking for source code?"
+    source_file: "doc_05_ast_parsing.pdf"
+    gold_snippet: "Traditional character-based chunking breaks code mid-function or across class boundaries, destroying syntactic context. AST parsers parse source code into tree nodes representing classes, methods, and functions."
+
+  - id: 6
+    question: "What is the primary difference between Bi-Encoders and Cross-Encoders during retrieval?"
+    source_file: "doc_06_cross_encoders.pdf"
+    gold_snippet: "Bi-encoders encode queries and documents independently for fast ANN search. Cross-encoders process query and document pairs simultaneously through full self-attention layers, capturing complex token-level interactions."
+
+  - id: 7
+    question: "What are the three dimensions of the RAG Triad evaluation metric?"
+    source_file: "doc_07_eval_metrics.pdf"
+    gold_snippet: "Evaluating RAG systems requires measuring three orthogonal dimensions: Context Relevance (is retrieved context pertinent?), Groundedness (is response supported by context?), and Answer Relevance (does response answer query?)."
+
+  - id: 8
+    question: "What technique allows fine-tuning embedding models on domain-specific pairs?"
+    source_file: "doc_08_embedding_models.pdf"
+    gold_snippet: "Multiple Negatives Ranking Loss (MNRL) and Matryoshka Representation Learning allow fine-tuning embeddings on domain-specific pair datasets (query, positive_doc, negative_doc)."
+
+  - id: 9
+    question: "Which consensus protocol is used to manage leader election and index state replication in distributed vector storage?"
+    source_file: "doc_09_distributed_storage.pdf"
+    gold_snippet: "Raft consensus protocol manages leader election and index state replication, guaranteeing linearizable reads and high availability during node failures."
+
+  - id: 10
+    question: "How do RAG systems reduce Time-To-First-Token (TTFT) for user responses?"
+    source_file: "doc_10_llm_synthesis.pdf"
+    gold_snippet: "RAG systems stream response tokens back to users via Server-Sent Events (SSE) or WebSockets, reducing Time-To-First-Token (TTFT) to under 300ms."

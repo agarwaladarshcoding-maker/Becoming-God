@@ -1,59 +1,51 @@
 #include <iostream>
-#include <vector>
 #include <string>
-#include <algorithm>
-#include <cmath>
-#include <map>
-#include <set>
-#include <queue>
-#include <stack>
+#include <vector>
 
 using namespace std;
 
-#define fast_io ios_base::sync_with_stdio(false); cin.tie(NULL); cout.tie(NULL)
-
-void solve() {
-    string s;
-    string target;
-    cin>>s>>target;
-    if(target.length()>s.length()){
-        cout<<0<<'\n';
+// The exact O(n) prefix function from before
+vector<int> prefix_function(string s) {
+    int n = (int)s.length();
+    vector<int> pi(n);
+    for (int i = 1; i < n; i++) {
+        int j = pi[i-1];
+        while (j > 0 && s[i] != s[j])
+            j = pi[j-1];
+        if (s[i] == s[j])
+            j++;
+        pi[i] = j;
     }
-    else if(target.length()==s.length()&&s==target){
-        cout<<1<<'\n';
-    }
-    else if(target.length()==s.length()&&s!=target){
-        cout<<0<<'\n';
-    }
-    else{
-        long long l1 = s.length();
-        long long l2 = target.length();
-        string word ="";
-        long long ans = 0;
-        for(int i = 0;i<l1;){
-            word+=s[i];
-            if(word.length()<target.length()){
-                i++;
-            }
-            else{
-                if(word==target){
-                    ans++;
-                    word = "";
-                    i++;
-                }
-                else{
-                    word = word.erase(0,1);
-                    
-                    i++;
-                }
-            }
-        }
-        cout<<ans<<'\n';
-    }
+    return pi;
 }
 
 int main() {
-    fast_io;
-    solve();
+    // Fast I/O for competitive programming
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+
+    string text, pattern;
+    if (!(cin >> text >> pattern)) return 0;
+
+    // 1. Create a combined string using a separator not present in the input
+    // The separator prevents prefix matches from bleeding past the pattern
+    string combined = pattern + "#" + text;
+
+    // 2. Compute the pi array for the combined string
+    vector<int> pi = prefix_function(combined);
+
+    int p_len = pattern.length();
+    int match_count = 0;
+
+    // 3. Count occurrences
+    // We only need to check the pi values in the 'text' part of our combined string
+    for (int i = p_len + 1; i < combined.length(); i++) {
+        if (pi[i] == p_len) {
+            match_count++;
+        }
+    }
+
+    cout << match_count << "\n";
+
     return 0;
 }

@@ -1,0 +1,255 @@
+  [2m📋 Loaded env from /Users/adarshagarwala/.omniroute/.env[0m
+  [2m📋 Loaded env from /Users/adarshagarwala/Documents/omniroute/.env[0m
+[
+  {
+    "id": "Kimi K3",
+    "provider": "kmc",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Kimi K2.7 Code",
+    "provider": "kmc",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Kimi K2.7 Code (High Speed)",
+    "provider": "kmc",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 4 Scout",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 3.3 70B",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GPT-OSS 120B",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GPT-OSS 20B",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Qwen3 32B",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Qwen3.6 27B",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GPT-OSS Safeguard 20B",
+    "provider": "groq",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GLM-5.2",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "MiniMax-M3",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "DeepSeek V4 Pro",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "DeepSeek V4 Flash",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Kimi K3",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Kimi K2.7 Code",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "MiMo-V2.5-Pro",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "MiMo-V2.5",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Qwen3.7 Max",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Qwen3.7 Plus",
+    "provider": "cp",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GLM 5.2",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "MiniMax M2.7",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Gemma 4 31B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Mistral Small 4 2603",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Mistral Large 3 675B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Devstral 2 123B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Qwen3.5-397B-A17B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Qwen3.5-122B-A10B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Step 3.5 Flash",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Step 3.7 Flash",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Kimi K2.6",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GPT OSS 120B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "GPT OSS 20B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Nemotron 3 Super 120B A12B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Nemotron 3 Ultra 550B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Dracarys Llama 3.1 70B Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Gemma 2 2B IT",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Gemma 3n E2B IT",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 3.1 8B Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 3.2 11B Vision Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 3.2 1B Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 3.2 3B Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 3.2 90B Vision Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama 4 Maverick 17B 128E Instruct",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Llama Guard 4 12B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Ministral 14B Instruct 2512",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Mistral Medium 3.5 128B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Mistral Nemotron",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Mixtral 8x7B Instruct v0.1",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  },
+  {
+    "id": "Ising Calibration 1 35B A3B",
+    "provider": "nvidia",
+    "contextWindow": "-"
+  }
+]
+[2m  ... and 86 more. Use --output json for full list.[0m
