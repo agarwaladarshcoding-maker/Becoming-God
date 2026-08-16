@@ -50,15 +50,15 @@ void solve()
         }
         i++;
     }
-     if ((countReds == 0 || countBlues == 0))
-            {
+    if ((countReds == 0 || countBlues == 0))
+    {
 
-                if (countReds != countBlues)
-                {
-                    cout << "NO" << '\n';
-                    return;
-                }
-            }
+        if (countReds != countBlues)
+        {
+            cout << "NO" << '\n';
+            return;
+        }
+    }
     cout << "YES" << '\n';
 }
 
