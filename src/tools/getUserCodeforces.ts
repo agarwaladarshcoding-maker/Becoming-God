@@ -20,7 +20,9 @@ export async function handleGetUserCodeforces(args: GetUserCodeforcesArgs) {
   const { handle } = args;
 
   try {
-    const rawUsers = await cfCall<RawCfUser[]>("user.info", { handles: handle });
+    const rawUsers = await cfCall<RawCfUser[]>("user.info", {
+      handles: handle,
+    });
     if (!rawUsers || rawUsers.length === 0) {
       return {
         content: [

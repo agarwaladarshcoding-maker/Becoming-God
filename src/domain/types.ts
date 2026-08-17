@@ -2,26 +2,26 @@ export type Site = "codeforces" | "atcoder";
 
 export interface Problem {
   site: Site;
-  id: string;                 // "cf:1900C" | "ac:abc300_c" (globally unique)
-  siteId: string;             // "1900C" | "abc300_c"
+  id: string; // "cf:1900C" | "ac:abc300_c" (globally unique)
+  siteId: string; // "1900C" | "abc300_c"
   name: string;
   url: string;
-  contestId: string;          // "1900" | "abc300"
+  contestId: string; // "1900" | "abc300"
   contestName?: string;
-  index?: string;             // "C"
-  difficulty?: number;        // normalized to the CF rating scale
+  index?: string; // "C"
+  difficulty?: number; // normalized to the CF rating scale
   difficultySource: "official" | "estimated" | "unknown";
   difficultyConfidence?: "high" | "low"; // low if is_experimental
-  tags: string[];             // CF tags; [] for AtCoder in v1
+  tags: string[]; // CF tags; [] for AtCoder in v1
   solvedCount?: number;
   points?: number;
 }
 
 export interface Submission {
   site: Site;
-  problemId: string;          // matches Problem.id
+  problemId: string; // matches Problem.id
   submissionId: string;
-  at: string;                 // ISO-8601 UTC
+  at: string; // ISO-8601 UTC
   verdict: "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE" | "OTHER";
   rawVerdict: string;
   language: string;
@@ -49,7 +49,23 @@ export interface VerificationResult {
   attempts: number;
   distinctVerdicts: string[];
   language?: string;
-  withinWindow: boolean;      // AC happened inside the requested `since` window
+  withinWindow: boolean; // AC happened inside the requested `since` window
+}
+
+export interface DbProblemRow {
+  id: string;
+  site: string;
+  site_id: string;
+  name: string;
+  url: string;
+  contest_id: string | null;
+  difficulty: number | null;
+  difficulty_source: "official" | "estimated" | "unknown";
+  difficulty_confidence: "high" | "low" | null;
+  tags: string | null;
+  solved_count: number | null;
+  points: number | null;
+  updated_at: number;
 }
 
 export interface RawCfUser {
