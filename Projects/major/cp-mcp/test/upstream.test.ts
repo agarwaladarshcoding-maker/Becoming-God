@@ -36,8 +36,12 @@ describe("Upstream HTTP & Codeforces API client", () => {
       },
     });
 
-    const p1 = politeFetch("https://codeforces.com/api/user.info?handles=tourist");
-    const p2 = politeFetch("https://codeforces.com/api/user.info?handles=Feodorv");
+    const p1 = politeFetch(
+      "https://codeforces.com/api/user.info?handles=tourist"
+    );
+    const p2 = politeFetch(
+      "https://codeforces.com/api/user.info?handles=Feodorv"
+    );
 
     // First request should resolve immediately or on next ticks
     await vi.advanceTimersByTimeAsync(1);
@@ -66,7 +70,10 @@ describe("Upstream HTTP & Codeforces API client", () => {
           status: 200,
           headers: new Headers({ "content-type": "application/json" }),
           text: async () =>
-            JSON.stringify({ status: "FAILED", comment: "Call limit exceeded. Please try again later." }),
+            JSON.stringify({
+              status: "FAILED",
+              comment: "Call limit exceeded. Please try again later.",
+            }),
           clone() {
             return this;
           },
@@ -75,7 +82,8 @@ describe("Upstream HTTP & Codeforces API client", () => {
       return {
         status: 200,
         headers: new Headers({ "content-type": "application/json" }),
-        text: async () => JSON.stringify({ status: "OK", result: ["mock-res"] }),
+        text: async () =>
+          JSON.stringify({ status: "OK", result: ["mock-res"] }),
         clone() {
           return this;
         },
@@ -105,7 +113,10 @@ describe("Upstream HTTP & Codeforces API client", () => {
       status: 200,
       headers: new Headers({ "content-type": "application/json" }),
       text: async () =>
-        JSON.stringify({ status: "FAILED", comment: "Call limit exceeded. Please try again later." }),
+        JSON.stringify({
+          status: "FAILED",
+          comment: "Call limit exceeded. Please try again later.",
+        }),
       clone() {
         return this;
       },
@@ -124,7 +135,9 @@ describe("Upstream HTTP & Codeforces API client", () => {
     await vi.advanceTimersByTimeAsync(16500);
 
     // After 4 attempts (initial + 3 retries), it should throw
-    await expect(fetchPromise).rejects.toThrow("Codeforces call limit exceeded");
+    await expect(fetchPromise).rejects.toThrow(
+      "Codeforces call limit exceeded"
+    );
     expect(mockFetch).toHaveBeenCalledTimes(4);
   });
 });
@@ -154,7 +167,8 @@ describe("getUserCodeforces Tool Handler", () => {
     mockFetch.mockResolvedValue({
       status: 200,
       headers: new Headers({ "content-type": "application/json" }),
-      text: async () => JSON.stringify({ status: "OK", result: [touristProfile] }),
+      text: async () =>
+        JSON.stringify({ status: "OK", result: [touristProfile] }),
       clone() {
         return this;
       },
@@ -179,13 +193,19 @@ describe("getUserCodeforces Tool Handler", () => {
     mockFetch.mockResolvedValue({
       status: 200,
       headers: new Headers({ "content-type": "application/json" }),
-      text: async () => JSON.stringify({ status: "FAILED", comment: "handles: User not found" }),
+      text: async () =>
+        JSON.stringify({
+          status: "FAILED",
+          comment: "handles: User not found",
+        }),
       clone() {
         return this;
       },
     });
 
-    const result = await handleGetUserCodeforces({ handle: "non_existent_user_123" });
+    const result = await handleGetUserCodeforces({
+      handle: "non_existent_user_123",
+    });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("handle not found on Codeforces");

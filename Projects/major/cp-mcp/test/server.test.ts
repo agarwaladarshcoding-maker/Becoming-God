@@ -63,7 +63,9 @@ describe("cp-mcp server", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     const handler = registeredTools.cp_get_user_codeforces.handler;
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
 
     try {
       const response = await handler({ handle: "tourist" }, {} as any);

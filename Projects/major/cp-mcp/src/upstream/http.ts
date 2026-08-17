@@ -55,12 +55,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Perform a throttled, retried HTTP fetch.
  * SSRF protected, concurrency capped, and polite to upstreams.
  */
-export async function politeFetch(url: string, opts?: PoliteFetchOptions): Promise<Response> {
+export async function politeFetch(
+  url: string,
+  opts?: PoliteFetchOptions
+): Promise<Response> {
   let hostname: string;
   try {
     const parsed = new URL(url);
     if (!ALLOWED_HOSTS.has(parsed.hostname)) {
-      throw new UpstreamError(`SSRF Guard: Host not allowlisted: ${parsed.hostname}`, undefined, false);
+      throw new UpstreamError(
+        `SSRF Guard: Host not allowlisted: ${parsed.hostname}`,
+        undefined,
+        false
+      );
     }
     hostname = parsed.hostname;
   } catch (err) {
@@ -95,7 +102,8 @@ export async function politeFetch(url: string, opts?: PoliteFetchOptions): Promi
       const startTime = Date.now();
       try {
         const headers = {
-          "User-Agent": "cp-mcp/0.1 (+https://github.com/agarwaladarshcoding-maker/cp-mcp)",
+          "User-Agent":
+            "cp-mcp/0.1 (+https://github.com/agarwaladarshcoding-maker/cp-mcp)",
           ...opts?.headers,
         };
 
@@ -114,8 +122,17 @@ export async function politeFetch(url: string, opts?: PoliteFetchOptions): Promi
             try {
               bodyText = await clone.text();
               const json = JSON.parse(bodyText);
-              if (json && json.status === "FAILED" && json.comment && json.comment.includes("Call limit exceeded")) {
-                throw new UpstreamError("Codeforces call limit exceeded", response.status, true);
+              if (
+                json &&
+                json.status === "FAILED" &&
+                json.comment &&
+                json.comment.includes("Call limit exceeded")
+              ) {
+                throw new UpstreamError(
+                  "Codeforces call limit exceeded",
+                  response.status,
+                  true
+                );
               }
             } catch (jsonErr) {
               if (jsonErr instanceof UpstreamError) {
@@ -127,7 +144,11 @@ export async function politeFetch(url: string, opts?: PoliteFetchOptions): Promi
         }
 
         if (response.status >= 500) {
-          throw new UpstreamError(`HTTP error status ${response.status}`, response.status, true);
+          throw new UpstreamError(
+            `HTTP error status ${response.status}`,
+            response.status,
+            true
+          );
         }
 
         const duration = Date.now() - startTime;
@@ -150,7 +171,11 @@ export async function politeFetch(url: string, opts?: PoliteFetchOptions): Promi
 
         if (err instanceof UpstreamError) {
           isRetryable = err.retryable;
-        } else if (err instanceof Error && err.name === "AbortError" && opts?.signal?.aborted) {
+        } else if (
+          err instanceof Error &&
+          err.name === "AbortError" &&
+          opts?.signal?.aborted
+        ) {
           // If the caller aborted, do not retry
           isRetryable = false;
         }
