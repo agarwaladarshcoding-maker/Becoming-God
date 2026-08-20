@@ -1,0 +1,50 @@
+{
+  "name": "cp-mcp",
+  "version": "1.0.0",
+  "description": "Competitive Programming Model Context Protocol (MCP) Server for Codeforces and AtCoder.",
+  "author": "adarshagarwala",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adarshagarwala/cp-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "competitive-programming",
+    "codeforces",
+    "atcoder"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "mcp": {
+    "transports": ["stdio", "sse"],
+    "resources": [
+      "cp://problems/snapshot_codeforces",
+      "cp://problems/snapshot_atcoder",
+      "cp://user/codeforces/{handle}/solved",
+      "cp://user/atcoder/{handle}/solved"
+    ],
+    "prompts": [
+      "daily_ladder_codeforces",
+      "daily_ladder_atcoder",
+      "audit_yesterday_codeforces",
+      "audit_yesterday_atcoder"
+    ],
+    "tools": [
+      "cp_get_user_codeforces",
+      "cp_get_user_atcoder",
+      "cp_rating_history_codeforces",
+      "cp_rating_history_atcoder",
+      "cp_search_problems_codeforces",
+      "cp_search_problems_atcoder",
+      "cp_get_problem_codeforces",
+      "cp_get_problem_atcoder",
+      "cp_verify_solved_codeforces",
+      "cp_verify_solved_atcoder",
+      "cp_analyze_weaknesses_codeforces",
+      "cp_analyze_weaknesses_atcoder",
+      "ping"
+    ]
+  }
+}

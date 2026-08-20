@@ -85,6 +85,55 @@ export function parseCodeforcesProblem(problemStr: string): {
 }
 
 /**
+ * Parses an AtCoder problem ID (e.g. "abc300_c", "ac:abc300_c") or task URL.
+ */
+export function parseAtcoderProblem(problemStr: string): {
+  contestId: string;
+  problemId: string;
+} {
+  let cleaned = problemStr.trim();
+
+  if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+    try {
+      const url = new URL(cleaned);
+      if (url.hostname !== "atcoder.jp") {
+        throw new Error("Not an AtCoder URL");
+      }
+
+      const match = url.pathname.match(
+        /^\/contests\/([A-Za-z0-9_-]+)\/tasks\/([A-Za-z0-9_-]+)$/
+      );
+      if (!match) {
+        throw new Error("Could not parse contest ID and problem ID from URL pathname");
+      }
+
+      return {
+        contestId: match[1].toLowerCase(),
+        problemId: match[2].toLowerCase(),
+      };
+    } catch (err) {
+      throw new Error(
+        `Invalid AtCoder URL: ${problemStr} (${err instanceof Error ? err.message : String(err)})`
+      );
+    }
+  }
+
+  if (cleaned.toLowerCase().startsWith("ac:")) {
+    cleaned = cleaned.slice(3);
+  }
+
+  const problemId = cleaned.toLowerCase();
+  const match = problemId.match(/^([a-z0-9]+(?:[-_][a-z0-9]+)*)_([a-z0-9]+)$/);
+  if (!match) {
+    throw new Error(
+      `Invalid AtCoder problem ID format: "${problemStr}". Expected formats: "abc300_c", "ac:abc300_c", or AtCoder task URL.`
+    );
+  }
+
+  return { contestId: match[1], problemId };
+}
+
+/**
  * Helper to extract tag and properly balance open/close div tags.
  */
 export function extractContainer(
@@ -124,7 +173,7 @@ export function extractContainer(
  * Trims HTML tags, collapses whitespace, and decodes HTML entities for raw pre text.
  */
 export function cleanPreText(htmlText: string): string {
-  let text = htmlText.replace(/<br\s*\/?>/gi, "\n").substring(0); // copy
+  let text = htmlText.replace(/<br\s*\/?>/gi, "\n"); // copy
   text = text.replace(/<[^>]*>/g, "");
   return text
     .replace(/&quot;/g, '"')

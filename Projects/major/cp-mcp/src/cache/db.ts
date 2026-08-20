@@ -63,6 +63,19 @@ export function initDb(dbPath?: string): Database.Database {
       last_run_at INTEGER,
       PRIMARY KEY (site, handle)
     );
+
+    CREATE TABLE IF NOT EXISTS submissions (
+      id TEXT PRIMARY KEY,
+      site TEXT NOT NULL,
+      handle TEXT NOT NULL,
+      problem_id TEXT NOT NULL,
+      at INTEGER NOT NULL,
+      verdict TEXT NOT NULL,
+      testset TEXT,
+      language TEXT NOT NULL,
+      participation TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_submissions_handle ON submissions(handle);
   `);
 
   return db;

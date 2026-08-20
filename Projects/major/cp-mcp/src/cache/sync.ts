@@ -1,6 +1,8 @@
 import { getDb } from "./db.js";
 import { cfCall } from "../upstream/codeforces.js";
+import { acCall } from "../upstream/atcoder.js";
 import { getDbKv, setDbKv } from "./kv.js";
+import { Submission, Site } from "../domain/types.js";
 
 export interface RawCfProblem {
   contestId?: number;
@@ -85,7 +87,7 @@ export async function syncCfProblemCatalogue(
   `);
 
   let count = 0;
-  const runTransaction = db.transaction(() => {
+  db.transaction(() => {
     for (const p of problems) {
       // Exclude Gym and ACMSGURU problems in v1
       if (p.problemsetName || !p.contestId || p.contestId >= 100000) {
@@ -115,12 +117,217 @@ export async function syncCfProblemCatalogue(
       );
       count++;
     }
-  });
-
-  runTransaction();
+  })();
 
   // Mark the sync as successful for 12 hours
   setDbKv(syncKey, true, 12 * 60 * 60);
 
   return { count, source: "live" };
+}
+
+
+const currentlySyncing = new Set<string>();
+
+export interface SyncStatus {
+  partial: boolean;
+  partialNote?: string;
+  upstreamCalls: number;
+}
+
+/**
+ * Synchronizes a user's submissions.
+ * For cold handles, performs a partial sync and spawns a background job.
+ */
+export async function syncUserSubmissions(
+  site: Site,
+  handle: string
+): Promise<SyncStatus> {
+  const db = getDb();
+  let upstreamCalls = 0;
+
+  // Get current watermark
+  const row = db.prepare("SELECT last_synced_epoch, last_run_at FROM user_sync WHERE site = ? AND handle = ?").get(site, handle) as { last_synced_epoch: number, last_run_at: number } | undefined;
+  const wm = row ? row.last_synced_epoch : 0;
+  
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  // If recent run, return fast (already synced recently)
+  if (row && nowEpoch - row.last_run_at < 60) {
+    return { partial: false, upstreamCalls: 0 };
+  }
+
+  const syncKey = `${site}:${handle}`;
+
+  if (currentlySyncing.has(syncKey)) {
+    return { 
+      partial: true, 
+      partialNote: "Background sync still in progress", 
+      upstreamCalls: 0 
+    };
+  }
+
+  let cfFrom = 1;
+  let acCursor = wm;
+  const performSync = async (maxDurationMs: number): Promise<{ hitTimeLimit: boolean, calls: number }> => {
+    const start = Date.now();
+    let calls = 0;
+    let hitTimeLimit = false;
+
+    if (site === "codeforces") {
+       const count = 200;
+       while (true) {
+          if (Date.now() - start > maxDurationMs) {
+            hitTimeLimit = true;
+            break;
+          }
+          const page = await cfCall<any[]>("user.status", { handle, from: cfFrom, count });
+          calls++;
+          if (!page || page.length === 0) break;
+
+          const lastPageItem = page[page.length - 1]; // Oldest in this page
+          
+          db.transaction(() => {
+              for (const p of page) {
+                  db.prepare(`
+                      INSERT INTO submissions (id, site, handle, problem_id, at, verdict, testset, language, participation)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      ON CONFLICT(id) DO UPDATE SET
+                        verdict = excluded.verdict,
+                        testset = excluded.testset
+                  `).run(
+                      String(p.id),
+                      site,
+                      handle,
+                      `cf:${p.problem.contestId}${p.problem.index}`,
+                      p.creationTimeSeconds,
+                      p.verdict,
+                      p.testset,
+                      p.programmingLanguage,
+                      p.author.participantType
+                  );
+              }
+          })();
+
+          if (lastPageItem.creationTimeSeconds <= wm) break;
+
+          cfFrom += count;
+          if (cfFrom > 10000) break; // safety cap
+       }
+    } else if (site === "atcoder") {
+      while (true) {
+        if (Date.now() - start > maxDurationMs) {
+          hitTimeLimit = true;
+          break;
+        }
+        const page = await acCall<any[]>("user/submissions", { user: handle, from_second: acCursor });
+        calls++;
+        if (!page || page.length === 0) break;
+
+        db.transaction(() => {
+          for (const p of page) {
+            db.prepare(`
+              INSERT INTO submissions (id, site, handle, problem_id, at, verdict, testset, language, participation)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                verdict = excluded.verdict
+            `).run(
+              String(p.id),
+              site,
+              handle,
+              `ac:${p.problem_id}`,
+              p.epoch_second,
+              p.result,
+              null,
+              p.language,
+              "contest"
+            );
+          }
+        })();
+
+        const maxEpoch = Math.max(...page.map((p: any) => p.epoch_second));
+        acCursor = maxEpoch + 1;
+        if (page.length < 500) break;
+      }
+    }
+
+    if (!hitTimeLimit) {
+        // Update watermark only if we finished seamlessly!
+        const currentEpoch = Math.floor(Date.now() / 1000);
+        db.prepare(`
+          INSERT INTO user_sync (site, handle, last_synced_epoch, last_run_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(site, handle) DO UPDATE SET
+            last_synced_epoch = excluded.last_synced_epoch,
+            last_run_at = excluded.last_run_at
+        `).run(site, handle, currentEpoch - 60, currentEpoch);
+    }
+    
+    // Always update user_solved for the submissions we DID get
+    db.prepare(`
+      INSERT OR REPLACE INTO user_solved (site, handle, problem_id, first_ac_at, attempts)
+      SELECT
+          site,
+          handle,
+          problem_id,
+          MIN(CASE WHEN verdict = 'AC' OR (verdict = 'OK' AND testset = 'TESTS') THEN at ELSE NULL END),
+          COUNT(*)
+      FROM submissions
+      WHERE site = ? AND handle = ?
+      GROUP BY site, handle, problem_id
+    `).run(site, handle);
+
+    return { hitTimeLimit, calls };
+  };
+
+  if (wm === 0) {
+    // Cold handle: do a partial sync and background the rest
+    currentlySyncing.add(syncKey);
+    
+    // allow a 4-second bounded block for the first pages
+    const syncRes = await performSync(4000); 
+    upstreamCalls += syncRes.calls;
+
+    if (syncRes.hitTimeLimit) {
+      // Background the rest
+      (async () => {
+         try {
+           let remainingCalls = 0;
+           let hit = true;
+           while (hit && remainingCalls < 50) { 
+             const res = await performSync(10000); // 10s chunks
+             remainingCalls += res.calls;
+             hit = res.hitTimeLimit;
+             if (!hit) break;
+           }
+         } catch(e) {
+           console.error("Background sync failed for", site, handle, e);
+         } finally {
+           currentlySyncing.delete(syncKey);
+         }
+      })();
+
+      return { 
+        partial: true, 
+        partialNote: "Full submission history is downloading in the background. First few pages fetched.", 
+        upstreamCalls 
+      };
+    } else {
+      currentlySyncing.delete(syncKey);
+      return { partial: false, upstreamCalls };
+    }
+  } else {
+    // Warm handle: full sync shouldn't take long (1-2 pages at most)
+    currentlySyncing.add(syncKey);
+    try {
+      const syncRes = await performSync(15000);
+      upstreamCalls += syncRes.calls;
+      
+      return { 
+        partial: syncRes.hitTimeLimit, 
+        partialNote: syncRes.hitTimeLimit ? "Sync interrupted by timeout" : undefined, 
+        upstreamCalls 
+      };
+    } finally {
+      currentlySyncing.delete(syncKey);
+    }
+  }
 }

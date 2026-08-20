@@ -26,10 +26,7 @@ export function formatMarkdownTable(
   const separatorRow =
     "| " + colWidths.map((w) => "-".repeat(w)).join(" | ") + " |";
   const bodyRows = rows.map((row) => {
-    const cells = Array.from({ length: numCols }, (_, i) => {
-      const val = row[i] !== undefined && row[i] !== null ? String(row[i]) : "";
-      return val.padEnd(colWidths[i]);
-    });
+    const cells = colWidths.map((w, i) => (row[i] ?? "").padEnd(w));
     return "| " + cells.join(" | ") + " |";
   });
 

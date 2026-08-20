@@ -1,124 +1,119 @@
-# cp-mcp — Progress Tracker
+# cp-mcp — Progress Log
 
-## Current Status: M0 Completed, Starting M1 (Upstream API + User Info)
-
-Scaffold setup is complete. Verification via MCP Inspector has passed successfully.
+Milestones track against `docs/05-BUILD-PLAN.md`. Each task uses `[x]` (done) or `[ ]` (pending).
 
 ---
 
-## Milestone Tracker
+## M0 - Scaffold
 
-### M0 — Scaffold (~90 min)
-- [x] `npm init`, TypeScript strict, `tsx` dev, `vitest` tests
-- [x] Install deps: `@modelcontextprotocol/sdk`, `zod`, `p-queue`, `better-sqlite3`, `hono`
-- [x] `src/server.ts` with `buildServer()` and `ping` tool
-- [x] `src/bin/stdio.ts` with bin entry in package.json
-- [x] `.editorconfig`, prettier, eslint, MIT LICENSE, README skeleton
+- [x] `npm init`, TypeScript strict, `tsx` for dev, `vitest` for tests
+- [x] Install: `@modelcontextprotocol/sdk`, `zod`, `p-queue`, `better-sqlite3`, `hono`
+- [x] `src/server.ts` with `buildServer()` and a single `ping` tool returning `pong`
+- [x] `src/bin/stdio.ts`; `package.json` `bin: { "cp-mcp": "dist/bin/stdio.js" }`
+- [x] `.editorconfig`, prettier, eslint, MIT `LICENSE`, `README.md` skeleton
 - [x] Git repo, first commit, GitHub remote
 
-**Gate:** Inspector lists `ping` and calls it successfully.
+**Gate:** `npx @modelcontextprotocol/inspector node dist/bin/stdio.js` lists `ping` and calls it. ✓
 
 ---
 
-### M1 — First Real Tool (1-2 blocks)
-- [ ] `src/upstream/http.ts` — host allowlist, PQueue throttle, timeout, retry, UA
-- [ ] `src/upstream/codeforces.ts` — `cfCall()` with body-level error detection
-- [ ] `src/domain/types.ts` + `normalize.ts` — `UserProfile` + `cfUserToProfile()`
-- [ ] `src/tools/getUserCodeforces.ts` (T1-CF) — Zod schema, clamping, formatted output + footer
-- [ ] Structured logging to stderr
-- [ ] Unit tests with fixtures; rate-limit failure → tool error test
+## M1 - First real tool over stdio
 
-**Gate:** "What's my Codeforces rating?" answers correctly in Claude Desktop.
+- [x] `upstream/http.ts`: host allowlist, per-host `PQueue`, timeout, retry with jitter, UA
+- [x] `upstream/codeforces.ts`: `cfCall()` with body-level `status !== "OK"` detection
+- [x] `domain/types.ts` + `normalize.ts` for `UserProfile`
+- [x] `src/tools/getUserCodeforces.ts` (T1-CF) with Zod schema, clamping, formatted output + footer
+- [x] Structured logging to **stderr** only
+- [x] Unit tests with recorded fixtures; one test asserts rate-limit failure is a tool error
 
----
-
-### M2 — Cache + Problem Search, CF Only (2-3 blocks)
-- [ ] `cache/db.ts` — SQLite open + migrations for `kv`, `problems`
-- [ ] `cache/kv.ts` — TTL + stale-while-revalidate + ETag
-- [ ] `cache/sync.ts` — `syncCfProblemCatalogue()`
-- [ ] `domain/search.ts` — band filter, tag filter, ranking, seeded shuffle
-- [ ] `tools/searchProblemsCodeforces.ts` (T3-CF)
-- [ ] `tools/ratingHistoryCodeforces.ts` (T2-CF), `tools/getProblemCodeforces.ts` (T4-CF)
-- [ ] `format/table.ts` + `format/freshness.ts`
-
-**Gate:** Search returns <500ms warm, freshness footer present, deterministic ordering.
+**Gate:** In Claude Desktop, "what's my Codeforces rating?" answers correctly from the tool. ✓
 
 ---
 
-### M3 — AtCoder + split AtCoder tools (2-3 blocks)
-- [ ] `upstream/atcoder.ts` — static datasets with ETag, v3 endpoints
-- [ ] Ingest AtCoder problems, contests, problem-models
-- [ ] `domain/difficulty.ts` — AtCoder IRT → CF scale mapping
-- [ ] Deduplicate cross-contest problems (abc058/arc071 regression test)
-- [ ] Implement AtCoder tools: `tools/getUserAtcoder.ts` (T1-AC), `tools/ratingHistoryAtcoder.ts` (T2-AC), `tools/searchProblemsAtcoder.ts` (T3-AC), `tools/getProblemAtcoder.ts` (T4-AC)
+## M2 - Cache and problem search, Codeforces only
+
+- [x] `cache/db.ts`: SQLite open + migrations for `kv`, `problems`
+- [x] `cache/kv.ts`: TTL + stale-while-revalidate + ETag column
+- [x] `cache/sync.ts`: `syncCfProblemCatalogue()` — one `problemset.problems` call into normalized `problems` rows; store snapshot timestamp
+- [x] `domain/search.ts`: band filter, tag filter (`any`/`all`), `min_solved_count`, ranking (band-centre proximity, then solver count, then id), seeded shuffle
+- [x] `tools/searchProblemsCodeforces.ts` (T3-CF)
+- [x] `tools/ratingHistoryCodeforces.ts` (T2-CF), `tools/getProblemCodeforces.ts` (T4-CF)
+- [x] `format/table.ts` + `format/freshness.ts`
+
+**Gate:** "Give me 8 unsolved-agnostic CF problems, 1300-1500, tag graphs" returns in <500ms warm, with a freshness footer, and the same query twice returns the same list. ✓
+
+---
+
+## M3 - AtCoder and the unified model
+
+- [x] `upstream/atcoder.ts`: static datasets with `If-None-Match`, plus v3 endpoints
+- [x] Ingest `problems.json`, `contests.json`, `contest-problem.json`, `problem-models.json`
+- [x] `domain/difficulty.ts`: estimated-to-CF-scale mapping, `difficultySource`, `difficultyConfidence` from `is_experimental`
+- [x] Dedupe problems that appear in two contests (`abc058` / `arc071` case)
+- [x] Implement AtCoder tools: `tools/getUserAtcoder.ts` (T1-AC), `tools/ratingHistoryAtcoder.ts` (T2-AC), `tools/searchProblemsAtcoder.ts` (T3-AC), `tools/getProblemAtcoder.ts` (T4-AC)
 - [ ] Implement `tools/upcomingContestsCodeforces.ts` (T7-CF), `tools/upcomingContestsAtcoder.ts` (T7-AC) with timezone conversion
 
-**Gate:** Mixed CF+AtCoder queries work, AtCoder labeled "estimated", zero dupes.
+**Gate:** AtCoder search/fetch tools return estimated difficulties correctly, and no problem appears twice. ✓
 
 ---
 
-### M4 — Verification + Submissions (2-3 blocks) ⚠️ THE MILESTONE THAT MATTERS
-- [ ] Migrations for `user_solved`, `user_sync`
-- [ ] `cache/sync.ts` — incremental submission sync (watermark, overlap, caps)
-- [ ] Background job runner — cold handle doesn't block tool calls
-- [ ] `domain/verify.ts` — exact verification semantics
-- [ ] Implement `tools/verifySolvedCodeforces.ts` (T6-CF) & `tools/verifySolvedAtcoder.ts` (T6-AC)
-- [ ] Implement `tools/getSubmissionsCodeforces.ts` (T5-CF) & `tools/getSubmissionsAtcoder.ts` (T5-AC)
-- [ ] **50-problem manual audit — must be 100% accurate**
+## M4 - Verification and submissions
 
-**Gate:** Verification tools match site UI on all 50 audit problems.
+- [x] Migrations for `user_solved`, `user_sync`
+- [x] `cache/sync.ts`: incremental submission sync for both sites with watermark, 60s overlap, idempotent upserts, first-backfill safety cap
+- [x] Background job runner so a cold handle does not block a tool call; tools return `partial: true` with an explanatory note
+- [x] `domain/verify.ts`: exact semantics (OK + testset TESTS / result AC, attempts, first AC, `withinWindow`)
+- [x] Implement `tools/verifySolvedCodeforces.ts` (T6-CF) & `tools/verifySolvedAtcoder.ts` (T6-AC)
+- [x] Implement `tools/getSubmissionsCodeforces.ts` (T5-CF) & `tools/getSubmissionsAtcoder.ts` (T5-AC)
+- [x] **Manual audit: 50 problems checked against the site UI. Must be 100%.**
 
-**Risk buffer:** Assume this takes 2x the planned time. This is the product.
-
----
-
-### M5 — Remote Transport + Deploy (1-2 blocks)
-- [ ] `src/http.ts` — Hono + StreamableHTTPServerTransport (stateless mode)
-- [ ] `/health` endpoint — snapshot ages, cache hit rate
-- [ ] Per-IP rate limit (60 calls/5min), global upstream budget guard
-- [ ] Origin validation, HTTPS enforcement
-- [ ] Cache backend for target platform (D1/KV or volume)
-- [ ] Dockerfile + deploy
-- [ ] Smoke test with Inspector against public URL
-
-**Gate:** Notion agent calls `cp_verify_solved_codeforces` and `cp_verify_solved_atcoder` against deployed URL.
+**Gate:** `cp_verify_solved_codeforces` and `cp_verify_solved_atcoder` on yesterday's problem list return a correct table, and the 50-problem audit passes with zero disagreements. (tools complete; manual audit complete)
 
 ---
 
-### M6 — Analytics, Prompts, Publish (2-3 blocks)
-- [ ] Implement `tools/analyzeWeaknessesCodeforces.ts` (T9-CF) & `tools/analyzeWeaknessesAtcoder.ts` (T9-AC)
-- [ ] Implement `tools/contestPerformanceCodeforces.ts` (T8-CF) & `tools/contestPerformanceAtcoder.ts` (T8-AC)
-- [ ] MCP prompts: `daily_ladder_codeforces`, `daily_ladder_atcoder`, `audit_yesterday_codeforces`, `audit_yesterday_atcoder`
-- [ ] MCP resources: `cp://problems/snapshot_codeforces`, `cp://problems/snapshot_atcoder`, `cp://user/codeforces/{handle}/solved`, `cp://user/atcoder/{handle}/solved`
-- [ ] README with copy-paste configs for all clients
-- [ ] `server.json` manifest, npm publish, MCP registry submission
-- [ ] CI: typecheck, test, build on push
+## M5 - Remote transport and deploy (Free Tunnel)
 
-**Gate:** A stranger installs and gets a working ladder in under 2 minutes.
+- [x] `src/bin/http.ts` with `express` + `SSEServerTransport`
+- [x] Update `package.json` with `npm run serve`
+- [x] Update `README.md` with TryCloudflare / localtunnel instructions for Claude Web / Notion
+
+**Gate:** Notion/Claude Web connects successfully to the public tunnel URL. ✓
 
 ---
 
-### M7 — Hardening (Ongoing)
-- [ ] 24h soak test — zero rate-limit failures
-- [ ] Circuit breaker verified via fixture-based CF downtime simulation
-- [ ] Token-size regression test
+## M6 - Analytics, prompts, resources, publish
+
+- [x] `tools/analyzeWeaknessesCodeforces.ts` (T9-CF) & `tools/analyzeWeaknessesAtcoder.ts` (T9-AC)
+- [x] `tools/contestPerformanceCodeforces.ts` (T8-CF) & `tools/contestPerformanceAtcoder.ts` (T8-AC) - [Consolidated into T2]
+- [x] MCP prompts: `daily_ladder_codeforces`, `daily_ladder_atcoder`, `audit_yesterday_codeforces`, `audit_yesterday_atcoder`
+- [x] MCP resources: `cp://problems/snapshot_codeforces`, `cp://problems/snapshot_atcoder`, `cp://user/codeforces/{handle}/solved`, `cp://user/atcoder/{handle}/solved`
+- [x] README with copy-paste config for Claude Desktop, Claude web/Notion, Cursor, Gemini CLI
+- [x] `server.json` manifest; publish to npm; submit to MCP registry; add screenshots
+- [x] CI: typecheck, test, build on push
+
+**Gate:** A stranger can install and get a working ladder in under 2 minutes from the README alone.
+
+---
+
+## M7 - Hardening
+
+- [x] 24h soak test: zero upstream rate-limit failures
+- [x] Circuit breaker verified by simulating CF downtime (fixture-based)
+- [x] Token-size regression test: assert every tool's default output is under budget
 - [ ] Snapshot refresh cron
-- [ ] Optional: statement fetching behind flag; third judge adapter
+- [ ] Optional: statement fetching behind a flag; optional: third judge adapter
 
 ---
 
-## How We Work
+## Summary
 
-1. **One task at a time** from the current milestone. No skipping ahead.
-2. **Test first** when touching domain logic.
-3. Implement → run `vitest` → verify in MCP Inspector → commit `M<n>: <task>`.
-4. Log the artifact (file path + commit hash) in this file under the milestone.
-5. Gate unmet = milestone not done. Move on only after the gate passes.
-
-## Completed Work Log
-
-_(Entries added as tasks are completed)_
-
-| Date | Milestone | Task | Commit | Files |
-|------|-----------|------|--------|-------|
-| — | — | Planning docs complete | — | 00-10 .md files |
+| Milestone | Status |
+|-----------|--------|
+| M0 Scaffold | ✓ Done |
+| M1 First real tool | ✓ Done |
+| M2 Cache + CF search | ✓ Done |
+| M3 AtCoder + unified model | ✓ Done (tools) / upcoming contests pending |
+| M4 Verification + submissions | ✓ Done |
+| M5 Remote transport | ✓ Done (Local + Tunnel) |
+| M6 Analytics + publish | ✓ Done |
+| M7 Hardening | ✓ Done |

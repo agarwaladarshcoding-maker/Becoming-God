@@ -64,19 +64,14 @@ export function computeCfRatingStats(
 
   // Trend over the last 5 contests (or fewer if history is shorter)
   const recentCount = Math.min(5, history.length);
-  let trendText = "";
-  if (recentCount > 0) {
-    const recentChanges = history.slice(-recentCount);
-    const startRating = recentChanges[0].oldRating;
-    const endRating = recentChanges[recentChanges.length - 1].newRating;
-    const overallDelta = endRating - startRating;
-    const sign = overallDelta >= 0 ? "+" : "";
-    trendText = `${sign}${overallDelta} rating points over the last ${recentCount} contest${
-      recentCount === 1 ? "" : "s"
-    }`;
-  } else {
-    trendText = "No recent contests";
-  }
+  const recentChanges = history.slice(-recentCount);
+  const startRating = recentChanges[0].oldRating;
+  const endRating = recentChanges[recentChanges.length - 1].newRating;
+  const overallDelta = endRating - startRating;
+  const sign = overallDelta >= 0 ? "+" : "";
+  const trendText = `${sign}${overallDelta} rating points over the last ${recentCount} contest${
+    recentCount === 1 ? "" : "s"
+  }`;
 
   return {
     peakRating,

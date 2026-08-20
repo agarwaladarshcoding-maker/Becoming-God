@@ -24,6 +24,25 @@ function getQueue(hostname: string): PQueue {
   return queue;
 }
 
+interface CircuitBreakerState {
+  failures: number;
+  lastFailureAt: number;
+  state: "CLOSED" | "OPEN" | "HALF_OPEN";
+}
+const breakers = new Map<string, CircuitBreakerState>();
+
+export const BREAKER_FAIL_THRESHOLD = 3;
+export const BREAKER_COOLDOWN_MS = 30000;
+
+function getBreaker(hostname: string): CircuitBreakerState {
+  let b = breakers.get(hostname);
+  if (!b) {
+    b = { failures: 0, lastFailureAt: 0, state: "CLOSED" };
+    breakers.set(hostname, b);
+  }
+  return b;
+}
+
 export class UpstreamError extends Error {
   constructor(
     message: string,
@@ -78,6 +97,15 @@ export async function politeFetch(
   }
 
   const queue = getQueue(hostname);
+
+  const breaker = getBreaker(hostname);
+  if (breaker.state === "OPEN") {
+    if (Date.now() - breaker.lastFailureAt > BREAKER_COOLDOWN_MS) {
+      breaker.state = "HALF_OPEN";
+    } else {
+      throw new UpstreamError(`Circuit breaker OPEN for ${hostname}`, undefined, false);
+    }
+  }
 
   const defaultTimeout = hostname.includes("codeforces.com") ? 10000 : 20000;
   const timeoutMs = opts?.timeoutMs ?? defaultTimeout;
@@ -163,6 +191,11 @@ export async function politeFetch(
           })
         );
 
+        if (breaker.state !== "CLOSED") {
+          breaker.state = "CLOSED";
+          breaker.failures = 0;
+        }
+
         return response;
       } catch (err: unknown) {
         const duration = Date.now() - startTime;
@@ -198,6 +231,13 @@ export async function politeFetch(
           continue;
         }
 
+        // Register a total failure for the breaker
+        breaker.failures++;
+        breaker.lastFailureAt = Date.now();
+        if (breaker.failures >= BREAKER_FAIL_THRESHOLD || breaker.state === "HALF_OPEN") {
+          breaker.state = "OPEN";
+        }
+
         if (err instanceof UpstreamError) {
           throw err;
         }
@@ -222,4 +262,5 @@ export function resetQueues() {
     queue.clear();
   }
   queues.clear();
+  breakers.clear();
 }
