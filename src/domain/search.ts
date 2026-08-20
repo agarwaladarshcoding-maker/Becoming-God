@@ -102,25 +102,12 @@ export function filterProblems(
         return false;
       }
       const problemTags = p.tags.map((t) => t.toLowerCase().trim());
-
-      if (tagMode === "all") {
-        for (const qt of queryTags) {
-          if (!problemTags.includes(qt)) {
-            return false;
-          }
-        }
-      } else {
-        // tagMode === "any"
-        let matched = false;
-        for (const qt of queryTags) {
-          if (problemTags.includes(qt)) {
-            matched = true;
-            break;
-          }
-        }
-        if (!matched) {
-          return false;
-        }
+      const matches =
+        tagMode === "all"
+          ? queryTags.every((qt) => problemTags.includes(qt))
+          : queryTags.some((qt) => problemTags.includes(qt));
+      if (!matches) {
+        return false;
       }
     }
 

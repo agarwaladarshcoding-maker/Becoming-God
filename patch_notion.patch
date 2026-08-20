@@ -1,0 +1,46 @@
+--- src/bin/http.ts
++++ src/bin/http.ts
+@@ -10,13 +10,11 @@
+   next();
+ });
+ 
+-app.post("/sse", express.json(), (req, res, next) => {
+-  console.log(`[HTTP] POST /sse body: ${JSON.stringify(req.body)}`);
+-  // just pass through so it returns 404 or maybe we should return 200?
+-  // Let's see what it is first
+-  next();
+-});
+-
+ // Store transports by session ID
+ const transports: Record<string, SSEServerTransport> = {};
++
++// Buffer for early POST requests without sessionId
++let pendingPost: { req: express.Request, res: express.Response, body: any } | null = null;
+ 
+ app.get("/sse", async (req, res) => {
+   console.log("Received GET request to /sse");
+@@ -31,9 +29,26 @@
+   
+   const server = buildServer();
+   await server.connect(transport);
++  
++  if (pendingPost) {
++    console.log("Processing pending POST request for new session");
++    const { req: preq, res: pres, body } = pendingPost;
++    pendingPost = null;
++    await transport.handlePostMessage(preq, pres, body);
++  }
+ });
+ 
+-app.post("/message", express.json(), async (req, res) => {
++app.post(["/message", "/sse"], express.json(), async (req, res) => {
+   console.log(`Received POST request to /message?sessionId=${req.query.sessionId}`);
+   const sessionId = req.query.sessionId as string;
+   
+   if (!sessionId) {
+-    res.status(400).send("Missing sessionId query parameter");
++    console.log("No sessionId provided, buffering POST request...");
++    pendingPost = { req, res, body: req.body };
++    // We don't send a response yet, we let the GET /sse handler process it
+     return;
+   }

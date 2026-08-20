@@ -25,6 +25,7 @@ export interface Submission {
   verdict: "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE" | "OTHER";
   rawVerdict: string;
   language: string;
+  testset?: string;
   participation?: "contest" | "practice" | "virtual" | "other";
   timeMs?: number;
 }
