@@ -4,6 +4,32 @@ import { acCall } from "../upstream/atcoder.js";
 import { getDbKv, setDbKv } from "./kv.js";
 import { Submission, Site } from "../domain/types.js";
 
+/**
+ * A row from Codeforces `user.status`. `verdict` and `testset` are optional
+ * because Codeforces omits them while a submission is still being judged.
+ */
+export interface RawCfSubmission {
+  id: number;
+  contestId?: number;
+  creationTimeSeconds: number;
+  problem: { contestId?: number; index: string; name: string };
+  author: { participantType: string };
+  programmingLanguage: string;
+  verdict?: string;
+  testset?: string;
+}
+
+/** A row from the AtCoder Problems `user/submissions` endpoint. */
+export interface RawAcSubmission {
+  id: number;
+  epoch_second: number;
+  problem_id: string;
+  contest_id: string;
+  user_id: string;
+  language: string;
+  result: string;
+}
+
 export interface RawCfProblem {
   contestId?: number;
   problemsetName?: string | null;
@@ -196,7 +222,7 @@ export async function syncUserSubmissions(
             hitTimeLimit = true;
             break;
           }
-          const page = await cfCall<any[]>("user.status", { handle, from: cfFrom, count });
+          const page = await cfCall<RawCfSubmission[]>("user.status", { handle, from: cfFrom, count });
           calls++;
           if (!page || page.length === 0) break;
 
@@ -216,8 +242,8 @@ export async function syncUserSubmissions(
                       handle,
                       `cf:${p.problem.contestId}${p.problem.index}`,
                       p.creationTimeSeconds,
-                      p.verdict,
-                      p.testset,
+                      p.verdict ?? null,
+                      p.testset ?? null,
                       p.programmingLanguage,
                       p.author.participantType
                   );
@@ -235,7 +261,7 @@ export async function syncUserSubmissions(
           hitTimeLimit = true;
           break;
         }
-        const page = await acCall<any[]>("user/submissions", { user: handle, from_second: acCursor });
+        const page = await acCall<RawAcSubmission[]>("user/submissions", { user: handle, from_second: acCursor });
         calls++;
         if (!page || page.length === 0) break;
 
@@ -260,7 +286,7 @@ export async function syncUserSubmissions(
           }
         })();
 
-        const maxEpoch = Math.max(...page.map((p: any) => p.epoch_second));
+        const maxEpoch = Math.max(...page.map(p => p.epoch_second));
         acCursor = maxEpoch + 1;
         if (page.length < 500) break;
       }

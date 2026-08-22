@@ -6,6 +6,19 @@ import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
 import { resolveHandle } from "../domain/config.js";
 
+/** Row shape of `SELECT * FROM submissions`, per the CREATE TABLE in `src/cache/db.ts`. */
+interface DbSubmissionRow {
+  id: string;
+  site: string;
+  handle: string;
+  problem_id: string;
+  at: number;
+  verdict: string;
+  testset: string | null;
+  language: string;
+  participation: string | null;
+}
+
 export function registerGetSubmissionsAtcoder(server: McpServer) {
   server.tool(
     "cp_get_submissions_atcoder",
@@ -23,7 +36,7 @@ export function registerGetSubmissionsAtcoder(server: McpServer) {
       const db = getDb();
 
       let query = "SELECT * FROM submissions WHERE site = 'atcoder' AND handle = ?";
-      const params: any[] = [handle];
+      const params: (string | number)[] = [handle];
 
       if (args.problem) {
          let p = args.problem.toLowerCase();
@@ -56,7 +69,7 @@ export function registerGetSubmissionsAtcoder(server: McpServer) {
       query += " ORDER BY at DESC LIMIT ?";
       params.push(args.limit);
 
-      const rows = db.prepare(query).all(...params) as any[];
+      const rows = db.prepare(query).all(...params) as DbSubmissionRow[];
 
       const mapped = rows.map(r => ({
           at: new Date(r.at * 1000).toISOString().replace("T", " ").substring(0, 16),
