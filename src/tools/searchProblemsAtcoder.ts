@@ -28,6 +28,10 @@ interface MergedProblem {
 
 type ProblemModels = Record<string, { difficulty?: number | null; is_experimental?: boolean }>;
 
+interface ContestListEntry {
+  id: string;
+}
+
 function normalizeAcDifficulty(d: number): number {
   const raw = d < 400 ? 800 + d * 0.5 : d + 400;
   return Math.min(3500, Math.max(800, Math.round(raw / 100) * 100));
@@ -61,6 +65,20 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
   );
   if (modelsSource === "live") { upstreamCalls++; source = "live"; }
 
+  const { data: contests, source: contestsSource } = await getCachedOrFetch<ContestListEntry[]>(
+    "ac:catalogue:contests",
+    24 * 3600,
+    async () => {
+      const resp = await politeFetch("https://kenkoooo.com/atcoder/resources/contests.json");
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching contests.json`);
+      const data = await resp.json() as ContestListEntry[];
+      return { data };
+    }
+  );
+  if (contestsSource === "live") { upstreamCalls++; source = "live"; }
+
+  const contestIds = new Set<string>((contests ?? []).map(c => c.id));
+
   if (!merged || merged.length === 0) return { source, upstreamCalls };
 
   const db = getDb();
@@ -85,7 +103,14 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
     for (const p of merged) {
       const siteId = p.id; // p.id is already "abc300_c" — the full problem id
       const id = `ac:${siteId}`;
-      const url = `https://atcoder.jp/contests/${p.contest_id}/tasks/${p.id}`;
+
+      // p.contest_id from merged-problems.json is often a re-run ("adt_*"), not the real
+      // contest — derive it from the problem id instead, split at the LAST underscore so
+      // multi-underscore contests like "tenka1_2017_a" still resolve to "tenka1_2017".
+      const lastUnderscore = siteId.lastIndexOf("_");
+      const derivedContestId = lastUnderscore > 0 ? siteId.slice(0, lastUnderscore) : null;
+      const contestId = derivedContestId && contestIds.has(derivedContestId) ? derivedContestId : p.contest_id;
+      const url = `https://atcoder.jp/contests/${contestId}/tasks/${p.id}`;
       const rawDifficulty = models?.[p.id]?.difficulty;
       const cfDiff = rawDifficulty != null ? normalizeAcDifficulty(rawDifficulty) : null;
 
@@ -95,7 +120,7 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
         siteId,
         p.name,
         url,
-        p.contest_id,
+        contestId,
         cfDiff,
         rawDifficulty != null ? "estimated" : "unknown",
         models?.[p.id]?.is_experimental === true ? "low" : "high",
