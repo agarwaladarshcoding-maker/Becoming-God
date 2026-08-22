@@ -132,6 +132,15 @@ export interface SyncStatus {
   partial: boolean;
   partialNote?: string;
   upstreamCalls: number;
+  /**
+   * Whether a full backfill of this handle's submission history has ever
+   * finished. Derived from the user_sync watermark, which is written only
+   * when a sync pass completes without hitting its time limit (see
+   * performSync below). NOT the inverse of `partial` — `partial` also means
+   * "a background job is running", while `complete` is specifically about
+   * whether absence of a submission in the cache is meaningful.
+   */
+  complete: boolean;
 }
 
 /**
@@ -152,16 +161,24 @@ export async function syncUserSubmissions(
   const nowEpoch = Math.floor(Date.now() / 1000);
   // If recent run, return fast (already synced recently)
   if (row && nowEpoch - row.last_run_at < 60) {
-    return { partial: false, upstreamCalls: 0 };
+    // A watermark row only exists once a full pass has completed at least
+    // once (see the !hitTimeLimit branch in performSync), so its presence
+    // here means the backfill is done.
+    return { partial: false, upstreamCalls: 0, complete: true };
   }
 
   const syncKey = `${site}:${handle}`;
 
   if (currentlySyncing.has(syncKey)) {
-    return { 
-      partial: true, 
-      partialNote: "Background sync still in progress", 
-      upstreamCalls: 0 
+    return {
+      partial: true,
+      partialNote: "Background sync still in progress",
+      upstreamCalls: 0,
+      // A backfill from before this in-flight sync already finished
+      // (wm > 0) means the cache still holds a complete history even
+      // while this refresh runs. A cold handle mid-backfill has no such
+      // history yet.
+      complete: wm > 0,
     };
   }
 
@@ -305,14 +322,15 @@ export async function syncUserSubmissions(
          }
       })();
 
-      return { 
-        partial: true, 
-        partialNote: "Full submission history is downloading in the background. First few pages fetched.", 
-        upstreamCalls 
+      return {
+        partial: true,
+        partialNote: "Full submission history is downloading in the background. First few pages fetched.",
+        upstreamCalls,
+        complete: false,
       };
     } else {
       currentlySyncing.delete(syncKey);
-      return { partial: false, upstreamCalls };
+      return { partial: false, upstreamCalls, complete: true };
     }
   } else {
     // Warm handle: full sync shouldn't take long (1-2 pages at most)
@@ -320,11 +338,12 @@ export async function syncUserSubmissions(
     try {
       const syncRes = await performSync(15000);
       upstreamCalls += syncRes.calls;
-      
-      return { 
-        partial: syncRes.hitTimeLimit, 
-        partialNote: syncRes.hitTimeLimit ? "Sync interrupted by timeout" : undefined, 
-        upstreamCalls 
+
+      return {
+        partial: syncRes.hitTimeLimit,
+        partialNote: syncRes.hitTimeLimit ? "Sync interrupted by timeout" : undefined,
+        upstreamCalls,
+        complete: !syncRes.hitTimeLimit,
       };
     } finally {
       currentlySyncing.delete(syncKey);
