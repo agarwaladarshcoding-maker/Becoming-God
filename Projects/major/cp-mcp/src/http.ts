@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { pathToFileURL } from "node:url";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { buildServer } from "./server.js";
 import { getDb } from "./cache/db.js";
@@ -123,3 +125,16 @@ app.all("/mcp", async c => {
 });
 
 export default app;
+
+// Only bind a port when this module is run directly (`node dist/http.js`), not when
+// it's imported — tests and tooling import this module and must not start a listener.
+const isMain =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
+  const port = Number(process.env.PORT) || 3000;
+  serve({ fetch: app.fetch, port }, info => {
+    console.error(`cp-mcp http server listening on http://localhost:${info.port}`);
+  });
+}
