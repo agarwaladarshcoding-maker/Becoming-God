@@ -299,8 +299,15 @@ export async function syncUserSubmissions(
     // Cold handle: do a partial sync and background the rest
     currentlySyncing.add(syncKey);
     
-    // allow a 4-second bounded block for the first pages
-    const syncRes = await performSync(4000); 
+    // Block for up to 20s on the first sync of a handle. Codeforces is throttled
+    // to one request per 2100ms, so 4s bought only 2 pages (400 submissions) and
+    // left most of the history missing — which surfaced as "unknown" rows on the
+    // very first question anyone asks. 20s buys ~9 pages (~1800 submissions),
+    // enough to finish a normal account outright. It is paid once per handle,
+    // ever: afterwards the watermark makes a refresh a single call. The ceiling
+    // is MCP client tool timeouts, which sit comfortably above this. Huge
+    // histories still fall through to the background continuation below.
+    const syncRes = await performSync(20000);
     upstreamCalls += syncRes.calls;
 
     if (syncRes.hitTimeLimit) {
