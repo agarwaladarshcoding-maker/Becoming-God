@@ -3,3 +3,6 @@ dist/
 .claude/
 .DS_Store
 *.log
+cache.db
+cache.db-wal
+cache.db-shm

@@ -1,1 +1,0 @@
-const currentlySyncing = new Set();
