@@ -29,7 +29,5 @@ ENV PORT=3000
 ENV NODE_ENV=production
 ENV CP_MCP_DB_PATH=/data/cp-mcp.db
 
-# Run the HTTP server entrypoint. We will use tsx against src/http.ts or run the compiled output.
-# Since tsx is in devDependencies, we should run the compiled output.
-# Wait, if http.ts is not in bin, we can run `node dist/http.js`.
+# Run the compiled HTTP server entrypoint.
 CMD ["node", "dist/http.js"]
