@@ -23,14 +23,15 @@ Every client configuration below points at `dist/bin/stdio.js`, so re-run `npm r
 
 ### Tools
 
-15 tools total (14 CP tools + `ping`). `cp_upcoming_contests_{cf,ac}` and `cp_contest_performance_{cf,ac}` are specified in `docs/04-TOOL-CONTRACTS.md` but **not implemented yet** — they are not available.
+17 tools total (16 CP tools + `ping`). `cp_contest_performance_{cf,ac}` is specified in `docs/04-TOOL-CONTRACTS.md` but **not implemented yet** — it is not available.
 
 - `cp_get_user_{codeforces,atcoder}` — Fetch user profile info, current rating, and max rating.
 - `cp_rating_history_{codeforces,atcoder}` — Fetch rating history, recent contest performances, and rating trends.
 - `cp_search_problems_{codeforces,atcoder}` — Find practice problems within a specific difficulty band, topic tags, and optionally excluding solved problems.
 - `cp_get_problem_{codeforces,atcoder}` — Get metadata for a specific problem by ID or URL.
-- `cp_verify_solved_{codeforces,atcoder}` — Machine-verify whether a handle has solved specific problems using submission history.
+- `cp_verify_solved_{codeforces,atcoder}` — Machine-verify whether a handle has solved specific problems using submission history. On a cold cache the answer for an older problem may come back `? unknown` instead of `✓`/`✗` — that means your submission history for that period is still downloading, **not** that the problem is unsolved. Ask again shortly; it resolves to a real answer once the backfill finishes (normally on the first call for a typical account — the first sync of a handle is given a 20-second budget to pull its history before answering).
 - `cp_get_submissions_{codeforces,atcoder}` — Fetch recent submissions for a handle.
+- `cp_upcoming_contests_{codeforces,atcoder}` — List upcoming contests in a time window, with start times converted to a requested timezone.
 - `cp_analyze_weaknesses_{codeforces,atcoder}` — Analyze a user's weaknesses by grouping attempted and solved problems by tags or difficulty bands.
 - `ping` — Connection health check.
 

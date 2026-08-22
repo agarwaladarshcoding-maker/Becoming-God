@@ -51,7 +51,7 @@ Milestones track against `docs/05-BUILD-PLAN.md`. Each task uses `[x]` (done) or
 - [x] `domain/difficulty.ts`: estimated-to-CF-scale mapping, `difficultySource`, `difficultyConfidence` from `is_experimental`
 - [x] Dedupe problems that appear in two contests (`abc058` / `arc071` case)
 - [x] Implement AtCoder tools: `tools/getUserAtcoder.ts` (T1-AC), `tools/ratingHistoryAtcoder.ts` (T2-AC), `tools/searchProblemsAtcoder.ts` (T3-AC), `tools/getProblemAtcoder.ts` (T4-AC)
-- [ ] Implement `tools/upcomingContestsCodeforces.ts` (T7-CF), `tools/upcomingContestsAtcoder.ts` (T7-AC) with timezone conversion
+- [x] Implement `tools/upcomingContestsCodeforces.ts` (T7-CF), `tools/upcomingContestsAtcoder.ts` (T7-AC) with timezone conversion — both files existed but were never registered with the server until 2026-08-23. The AtCoder tool additionally had to be repointed: it was written against kenkoooo's `contests.json`, which is a purely historical archive (6,348 contests, zero in the future), so as originally written it would have answered "no upcoming contests" forever. It now scrapes `https://atcoder.jp/contests/` directly.
 
 **Gate:** AtCoder search/fetch tools return estimated difficulties correctly, and no problem appears twice. — **Was false until 2026-08-23**: the catalogue read `difficulty` from `merged-problems.json`, which has no such field, so all 9,395 AtCoder problems had `difficulty = NULL` and `cp_search_problems_atcoder` returned "No AtCoder problems found" for every band ever queried. Fixed by reading `problem-models.json` instead — 4,785 problems now carry an estimated difficulty across 28 bands, 565 flagged low-confidence. ✓
 
@@ -130,6 +130,55 @@ None of this constitutes the M4 manual audit — that is still outstanding (see 
 
 ---
 
+## 2026-08-23 - Second pass: verifier honesty and two unwired tools
+
+A follow-up review the same day found and fixed one correctness defect and switched on two finished tools
+that were sitting unused. Seven commits, `cp-mcp-fixes` branch.
+
+- **`cp_verify_solved_*` could report a genuine old solve as `✗ untouched`.** The cold-start sync only had a
+  4-second budget before answering, and at Codeforces' 1-request-per-2100ms throttle that bought exactly 2
+  pages (400 submissions). For this project's own 773-submission / 426-problem history, that left 183 of
+  426 problems outside the synced window — and the code treated "no submission on file yet" as "never
+  submitted", so those 183 read as `✗ untouched` instead of the truth. Fixed in two parts:
+  - `SyncStatus` gained a `complete: boolean` field (derived from the existing `user_sync` watermark, no
+    schema change): does a full backfill of this handle's history exist?
+  - `VerificationResult.status` gained `"unknown"`. `verifySubmissionChain` now takes a `historyComplete`
+    parameter and returns `unknown` **only** when the submission list is empty *and* the history is
+    incomplete. Positive findings (`solved`/`attempted`) are untouched either way — a submission in the
+    cache is real regardless of what else hasn't synced yet; only the absence of one was ever unreliable.
+  - Both verify tools render `? unknown` with "not in synced history yet" in the Verdicts cell, append
+    `, N unknown` to the headline count, and add a note that the older history is still downloading and to
+    ask again shortly. `structuredContent` carries `unknownCount` and `complete`.
+  - `test/verify.test.ts` added — 12 tests for `verifySubmissionChain`, which previously had none.
+- **Cold-start sync budget raised 4s → 20s**, so a normal account's history finishes on the first call
+  instead of leaving most of it in the `unknown` state above. Measured on this project's cold cache after
+  the change: 5 upstream calls, `partial: no`, `complete: true`, 0 unknown — and `1A` correctly reads solved
+  2026-01-15, where under the old 4s budget the same row read `untouched`.
+- **`cp_upcoming_contests_codeforces` registered.** It was fully written — schema, formatting, error
+  paths — but never imported into `src/server.ts`, so no client could call it.
+- **`cp_upcoming_contests_atcoder` repointed and registered.** As written it read kenkoooo's
+  `contests.json`, a historical archive: 6,348 contests, zero in the future, latest start 2026-08-22.
+  Registering it as-is would have answered "No upcoming AtCoder contests" for every window forever — the
+  same failure shape as the verifier bug above, just on a different tool. It now scrapes the
+  `contest-table-upcoming` table on `https://atcoder.jp/contests/` (host already allowlisted and throttled),
+  cached under a new key `ac:contests:upcoming` at a 15-minute TTL, kept separate from
+  `ac:catalogue:contests` which owns the historical archive used for AtCoder problem-URL derivation. A parse
+  yielding zero rows returns `isError` rather than a cheerful empty result.
+- **Tool count 15 → 17.** The two tools above are the additions.
+- **MCP prompts can now default the handle.** The four prompts at `src/server.ts` took a required
+  `handle`, so `daily_ladder_codeforces` still demanded one even though the tools already default it from
+  `CP_MCP_CF_HANDLE`/`CP_MCP_AC_HANDLE`. `handle` is now optional and resolved through the same
+  `resolveHandle` precedence the tools use.
+- **All 13 `any` escapes removed from `src/`** (`grep -rn ": any\|as any\|any\[\]" src/` now returns 0).
+  Typing the Codeforces submission payload surfaced a latent bug: CF omits `verdict`/`testset` while a
+  submission is still judging, and `better-sqlite3` rejects `undefined` bind parameters; both now coalesce
+  to `null`.
+
+None of this constitutes the M4 manual audit either — it is still outstanding (see M4 above), and this pass
+is what makes a cold verify trustworthy enough to run that audit against.
+
+---
+
 ## Summary
 
 | Milestone | Status |
@@ -137,8 +186,8 @@ None of this constitutes the M4 manual audit — that is still outstanding (see 
 | M0 Scaffold | ✓ Done |
 | M1 First real tool | ✓ Done |
 | M2 Cache + CF search | ✓ Done |
-| M3 AtCoder + unified model | ✓ Tools fixed 2026-08-23 (AtCoder difficulty was NULL, now populated) / upcoming contests pending |
-| M4 Verification + submissions | Tools done; **50-problem manual audit not run** — M4 gate outstanding |
+| M3 AtCoder + unified model | ✓ Done — AtCoder difficulty fixed 2026-08-23 (was NULL, now populated); upcoming-contests tools (T7) registered 2026-08-23 |
+| M4 Verification + submissions | Tools done; `unknown` status added 2026-08-23 so absent history can't read as "not solved"; **50-problem manual audit still not run** — M4 gate outstanding |
 | M5 Remote transport | Local stdio entrypoint fixed 2026-08-23; **not deployed**, remote clients not connected |
 | M6 Analytics + publish | Resources fixed 2026-08-23 and now working; **not published to npm/MCP registry** |
 | M7 Hardening | ✓ Done |

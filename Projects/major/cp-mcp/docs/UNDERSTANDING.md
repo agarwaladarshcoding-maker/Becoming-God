@@ -2,10 +2,10 @@
 
 ## What We're Building
 - An open, read-only MCP server that gives any AI client (Claude, Notion, Cursor, Gemini) access to Codeforces + AtCoder data
-- 15 tools exist today (14 CP tools + `ping`) — `cp_upcoming_contests_{codeforces,atcoder}` and `cp_contest_performance_{codeforces,atcoder}` are specified in `docs/04-TOOL-CONTRACTS.md` but not implemented; the original design called for 18 (9 per platform)
+- 17 tools exist today (16 CP tools + `ping`) — `cp_upcoming_contests_{codeforces,atcoder}` (T7) were registered 2026-08-23; `cp_contest_performance_{codeforces,atcoder}` (T8) is still specified in `docs/04-TOOL-CONTRACTS.md` but not implemented; the original design called for 18 (9 per platform)
 - The core value: **machine-verified solve status** so training logs can't be faked
 
-## Tool Inventory (15 implemented; design target is 9 per platform, 4 tools not yet built)
+## Tool Inventory (17 implemented; design target is 9 per platform, 2 tools not yet built)
 
 Each of the following exists as `_codeforces` and `_atcoder` variants:
 1. `cp_get_user_{platform}` — profile snapshot (rating, rank, solved count)
@@ -14,8 +14,8 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
 4. `cp_get_problem_{platform}` — single problem metadata + optional statement
 5. `cp_get_submissions_{platform}` — recent submission history with verdicts
 6. `cp_verify_solved_{platform}` — **THE killer tools** — prove from real submissions whether problems were solved
-7. `cp_upcoming_contests_{platform}` — schedule with timezone conversion
-8. `cp_contest_performance_{platform}` — post-contest breakdown
+7. `cp_upcoming_contests_{platform}` — schedule with timezone conversion — **implemented and registered as of 2026-08-23**
+8. `cp_contest_performance_{platform}` — post-contest breakdown — **not implemented**
 9. `cp_analyze_weaknesses_{platform}` — tag-level stats to identify weak topics
 
 ## Architecture
@@ -44,7 +44,7 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
 ## Key Design Decisions
 - TypeScript + official MCP SDK for best client compatibility and `npx` distribution
 - SQLite (not Redis) — zero infra, one file, fast enough by orders of magnitude
-- Task-shaped tools split by platform (design target: 9 per platform; 15 implemented today) — better tool selection, simpler parameters, fewer round trips
+- Task-shaped tools split by platform (design target: 9 per platform; 17 implemented today) — better tool selection, simpler parameters, fewer round trips
 - Stateless HTTP mode — works on serverless (Workers/Lambda)
 - Read-only, credential-free — publicly shareable, tiny security surface
 
@@ -63,7 +63,7 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
 
 ## Current State
 - **All planning docs (00-10) are written and complete**
-- **The server works over stdio** — 15 tools (14 CP tools + `ping`) implemented, 24/24 tests pass, `npx tsc --noEmit` clean
+- **The server works over stdio** — 17 tools (16 CP tools + `ping`) implemented, 36/36 tests pass, `npx tsc --noEmit` clean
 - As of 2026-08-23, four defects that broke it in practice were found and fixed: the cache DB path was
   relative and failed under Claude Desktop's `cwd=/`; AtCoder difficulty was read from a JSON file that has
   no `difficulty` field (all 9,395 rows were `NULL`); AtCoder problem URLs pointed at the wrong contest for
@@ -71,9 +71,19 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
   request — the deprecated SSE server that duplicated it has been deleted. See `docs/progress.md`'s
   2026-08-23 entry for the full list, including the new `CP_MCP_CF_HANDLE`/`CP_MCP_AC_HANDLE` default-handle
   support.
+- A second pass, also dated 2026-08-23, fixed a correctness defect in the verifier and switched on two
+  finished-but-unwired tools: `cp_verify_solved_*` could report an old solve as `✗ untouched` simply because
+  the cold-start sync hadn't downloaded that far back yet. A new `unknown`/`?` status now covers "not in
+  synced history yet" without touching any positive (`solved`/`attempted`) result, the cold-start sync
+  budget went from 4s to 20s so a normal account's history finishes on the first call instead of leaving
+  most of it unresolved, and `cp_upcoming_contests_codeforces` / `cp_upcoming_contests_atcoder` (T7) were
+  registered — the AtCoder one had to be repointed from kenkoooo's `contests.json` (a historical archive
+  with zero future contests) to scraping `atcoder.jp/contests/` directly. See `docs/progress.md`'s second
+  2026-08-23 entry for the full list.
 - Wired into Claude Code via `.mcp.json` in this repo. Remote (Streamable HTTP) is built and functional
   locally but **not deployed** — no Fly/tunnel, so Claude Web and Notion cannot reach it yet.
-- **`cp_upcoming_contests_*` and `cp_contest_performance_*` are unimplemented** — out of scope for now.
+- **`cp_upcoming_contests_*` (T7) are now implemented and registered.** `cp_contest_performance_*` (T8)
+  remains unimplemented — out of scope for now.
 - **The M4 50-problem manual audit has never been run.** `cp_verify_solved_*` work on spot checks but are
   not yet audited against the live site UIs; `audit_results.md` has 40 unticked rows, not 50. This remains
   the outstanding gate before "machine-verified" is a proven claim rather than a plausible one.
