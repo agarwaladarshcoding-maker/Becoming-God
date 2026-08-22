@@ -1,5 +1,12 @@
 # M4 Verification Audit Checklist
 
+**Status (2026-08-23): this checklist has not been carried out.** Every box below is unticked. This is the
+M4 gate ("Manual audit: 50 problems checked against the site UI. Must be 100%.") and it must be done by a
+human, manually, against the live Codeforces and AtCoder UIs — it cannot be ticked from tool output alone.
+It currently holds **40 rows**, where the milestone calls for **50**. Until this is run and passes with
+zero disagreements, `cp_verify_solved_codeforces` / `cp_verify_solved_atcoder` are implemented and working
+on spot checks, but not audited.
+
 Please manually verify the following against the respective site UIs to ensure 100% accuracy.
 
 ## Codeforces
