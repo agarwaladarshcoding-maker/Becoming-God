@@ -83,11 +83,11 @@ export async function handleVerifySolvedAtcoder(args: VerifySolvedAtcoderArgs) {
 
     return {
       input: entry.input,
-      result: verifySubmissionChain(entry.id, entry.name, entry.url, subs, sinceEpoch),
+      result: verifySubmissionChain(entry.id, entry.name, entry.url, subs, sinceEpoch, syncStatus.complete),
     };
   });
 
-  const statusEmoji = (s: string) => s === "solved" ? "✓" : s === "attempted" ? "~" : "✗";
+  const statusEmoji = (s: string) => s === "solved" ? "✓" : s === "attempted" ? "~" : s === "unknown" ? "?" : "✗";
 
   const tableRows = results.map(r => {
     if ("error" in r) return [r.input, "ERROR", r.error ?? "Parse error", "—", "—"];
@@ -97,13 +97,15 @@ export async function handleVerifySolvedAtcoder(args: VerifySolvedAtcoderArgs) {
       `${statusEmoji(res.status)} ${res.status}`,
       res.firstAcAt ? res.firstAcAt.substring(0, 16).replace("T", " ") + " UTC" : "—",
       String(res.attempts),
-      res.distinctVerdicts.join(", ") || "—",
+      res.status === "unknown" ? "not in synced history yet" : (res.distinctVerdicts.join(", ") || "—"),
     ];
   });
 
   const solvedCount = results.filter(r => !("error" in r) && r.result.status === "solved").length;
+  const unknownCount = results.filter(r => !("error" in r) && r.result.status === "unknown").length;
   const total = problems.length;
   const sinceLabel = since ? ` | window: ${since}` : "";
+  const unknownLabel = unknownCount > 0 ? `, ${unknownCount} unknown` : "";
 
   const footer = buildFreshnessFooter({
     source: syncStatus.upstreamCalls > 0 ? "live" : "cache",
@@ -111,11 +113,14 @@ export async function handleVerifySolvedAtcoder(args: VerifySolvedAtcoderArgs) {
     partial: syncStatus.partial,
   });
 
+  const unknownNote = "Older submission history is still downloading, so rows marked \"?\" can't be judged yet — ask again shortly.";
+  const note = unknownCount > 0 ? unknownNote : syncStatus.partialNote;
+
   const text = [
-    `AtCoder Verification for **${handle}**: ${solvedCount}/${total} solved${sinceLabel}`,
+    `AtCoder Verification for **${handle}**: ${solvedCount}/${total} solved${unknownLabel}${sinceLabel}`,
     "",
     formatMarkdownTable(["Problem", "Status", "First AC (UTC)", "Attempts", "Verdicts"], tableRows),
-    syncStatus.partialNote ? `\nNote: ${syncStatus.partialNote}` : "",
+    note ? `\nNote: ${note}` : "",
     "",
     footer,
   ].join("\n");
@@ -126,10 +131,12 @@ export async function handleVerifySolvedAtcoder(args: VerifySolvedAtcoderArgs) {
       handle,
       results,
       solvedCount,
+      unknownCount,
       total,
       source: syncStatus.upstreamCalls > 0 ? "live" : "cache",
       upstreamCalls: syncStatus.upstreamCalls,
       partial: syncStatus.partial,
+      complete: syncStatus.complete,
     },
   };
 }
