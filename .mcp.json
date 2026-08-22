@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cp-mcp": {
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/adarshagarwala/Documents/Becoming-God/Projects/major/cp-mcp/dist/bin/stdio.js"],
+      "env": { "CP_MCP_CF_HANDLE": "", "CP_MCP_AC_HANDLE": "" }
+    }
+  }
+}
