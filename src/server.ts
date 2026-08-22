@@ -50,6 +50,10 @@ import { registerGetSubmissionsCodeforces } from "./tools/getSubmissionsCodeforc
 import { registerGetSubmissionsAtcoder } from "./tools/getSubmissionsAtcoder.js";
 import { analyzeWeaknessesCodeforcesSchema, handleAnalyzeWeaknessesCodeforces } from "./tools/analyzeWeaknessesCodeforces.js";
 import { analyzeWeaknessesAtcoderSchema, handleAnalyzeWeaknessesAtcoder } from "./tools/analyzeWeaknessesAtcoder.js";
+import { getDb } from "./cache/db.js";
+import { resolveHandle } from "./domain/config.js";
+import { formatMarkdownTable } from "./format/table.js";
+import { buildFreshnessFooter } from "./format/freshness.js";
 
 /**
  * Helper to register CP tools with standardization and logging.
@@ -163,7 +167,7 @@ export function buildServer(): McpServer {
     "cp_get_user_codeforces",
     {
       description:
-        "Get a Codeforces user profile: current rating, max rating, rank title, solved count and last activity. Use for 'what is my rating on Codeforces' questions. For solved/unsolved questions about specific Codeforces problems, use cp_verify_solved_codeforces instead.",
+        "Get a Codeforces user profile: current rating, max rating, rank title, solved count and last activity. Use for 'what is my rating on Codeforces' questions. For solved/unsolved questions about specific Codeforces problems, use cp_verify_solved_codeforces instead. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_CF_HANDLE).",
       inputSchema: getUserCodeforcesSchema,
       annotations: {
         readOnlyHint: true,
@@ -197,7 +201,7 @@ export function buildServer(): McpServer {
     "cp_rating_history_codeforces",
     {
       description:
-        "Get Codeforces rating history for a user, containing date, contest name, rank, old/new rating, delta and a trend summary.",
+        "Get Codeforces rating history for a user, containing date, contest name, rank, old/new rating, delta and a trend summary. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_CF_HANDLE).",
       inputSchema: ratingHistoryCodeforcesSchema,
       annotations: {
         readOnlyHint: true,
@@ -231,7 +235,7 @@ export function buildServer(): McpServer {
     "cp_verify_solved_codeforces",
     {
       description:
-        "Machine-verify whether a Codeforces handle has solved specific problems, using submission history (verdict=OK, testset=TESTS). Returns solved/attempted/unseen per problem with first-AC timestamp and attempt count. Use this instead of cp_get_user_codeforces for solved/unsolved questions about specific problems.",
+        "Machine-verify whether a Codeforces handle has solved specific problems, using submission history (verdict=OK, testset=TESTS). Returns solved/attempted/unseen per problem with first-AC timestamp and attempt count. Use this instead of cp_get_user_codeforces for solved/unsolved questions about specific problems. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_CF_HANDLE).",
       inputSchema: verifySolvedCodeforcesSchema,
       annotations: {
         readOnlyHint: true,
@@ -249,7 +253,7 @@ export function buildServer(): McpServer {
     "cp_analyze_weaknesses_codeforces",
     {
       description:
-        "Analyze a Codeforces user's weaknesses by grouping their attempted and solved problems by tags. Calculates solve rate and average attempts per tag. Useful for identifying topics to practice.",
+        "Analyze a Codeforces user's weaknesses by grouping their attempted and solved problems by tags. Calculates solve rate and average attempts per tag. Useful for identifying topics to practice. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_CF_HANDLE).",
       inputSchema: analyzeWeaknessesCodeforcesSchema,
       annotations: {
         readOnlyHint: true,
@@ -269,7 +273,7 @@ export function buildServer(): McpServer {
     "cp_get_user_atcoder",
     {
       description:
-        "Get an AtCoder user profile: AC problem count and AC rank. Use for 'what is my AtCoder rank' questions. For solved/unsolved questions about specific AtCoder problems, use cp_verify_solved_atcoder instead.",
+        "Get an AtCoder user profile: AC problem count and AC rank. Use for 'what is my AtCoder rank' questions. For solved/unsolved questions about specific AtCoder problems, use cp_verify_solved_atcoder instead. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_AC_HANDLE).",
       inputSchema: getUserAtcoderSchema,
       annotations: {
         readOnlyHint: true,
@@ -285,7 +289,7 @@ export function buildServer(): McpServer {
     "cp_rating_history_atcoder",
     {
       description:
-        "Get AtCoder rated contest history for a user: date, contest, placement, old/new rating, delta. Use for tracking rating progress or peak rating on AtCoder.",
+        "Get AtCoder rated contest history for a user: date, contest, placement, old/new rating, delta. Use for tracking rating progress or peak rating on AtCoder. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_AC_HANDLE).",
       inputSchema: ratingHistoryAtcoderSchema,
       annotations: {
         readOnlyHint: true,
@@ -333,7 +337,7 @@ export function buildServer(): McpServer {
     "cp_verify_solved_atcoder",
     {
       description:
-        "Machine-verify whether an AtCoder handle has solved specific problems, using submission history (result=AC). Returns solved/attempted/unseen per problem with first-AC timestamp and attempt count. Use this instead of cp_get_user_atcoder for solved/unsolved questions about specific problems.",
+        "Machine-verify whether an AtCoder handle has solved specific problems, using submission history (result=AC). Returns solved/attempted/unseen per problem with first-AC timestamp and attempt count. Use this instead of cp_get_user_atcoder for solved/unsolved questions about specific problems. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_AC_HANDLE).",
       inputSchema: verifySolvedAtcoderSchema,
       annotations: {
         readOnlyHint: true,
@@ -352,7 +356,7 @@ export function buildServer(): McpServer {
     "cp_analyze_weaknesses_atcoder",
     {
       description:
-        "Analyze an AtCoder user's weaknesses by grouping their attempted and solved problems by difficulty band. Calculates solve rate and average attempts per band.",
+        "Analyze an AtCoder user's weaknesses by grouping their attempted and solved problems by difficulty band. Calculates solve rate and average attempts per band. The handle argument is optional; when omitted it defaults to the user's configured handle (CP_MCP_AC_HANDLE).",
       inputSchema: analyzeWeaknessesAtcoderSchema,
       annotations: {
         readOnlyHint: true,
@@ -454,6 +458,207 @@ Report which ones were successfully solved, which were attempted but not solved,
         }
       ]
     })
+  );
+
+  // Register MCP Resources
+
+  /**
+   * Median of a sorted numeric array (average of the two middle values on
+   * an even-length array). Computed in JS rather than SQL because the
+   * standard SQLite build here has no PERCENTILE_CONT / window-function
+   * median trick worth the complexity for a one-off summary stat.
+   */
+  function median(sorted: number[]): number | undefined {
+    if (sorted.length === 0) return undefined;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  }
+
+  function buildProblemsSnapshot(site: "codeforces" | "atcoder") {
+    const db = getDb();
+
+    const summary = db
+      .prepare(
+        "SELECT COUNT(*) as total, COUNT(difficulty) as withDifficulty, MIN(difficulty) as minDifficulty, MAX(difficulty) as maxDifficulty, MAX(updated_at) as maxUpdatedAt FROM problems WHERE site = ?"
+      )
+      .get(site) as {
+        total: number;
+        withDifficulty: number;
+        minDifficulty: number | null;
+        maxDifficulty: number | null;
+        maxUpdatedAt: number | null;
+      };
+
+    const difficulties = (
+      db
+        .prepare("SELECT difficulty FROM problems WHERE site = ? AND difficulty IS NOT NULL ORDER BY difficulty")
+        .all(site) as Array<{ difficulty: number }>
+    ).map((r) => r.difficulty);
+
+    const medianDifficulty = median(difficulties);
+    const snapshotAt = summary.maxUpdatedAt
+      ? new Date(summary.maxUpdatedAt * 1000).toISOString()
+      : "unknown";
+
+    const rows = [
+      ["Total problems", String(summary.total)],
+      ["With a known difficulty", String(summary.withDifficulty)],
+      ["Min difficulty", summary.minDifficulty !== null ? String(summary.minDifficulty) : "—"],
+      ["Max difficulty", summary.maxDifficulty !== null ? String(summary.maxDifficulty) : "—"],
+      ["Median difficulty", medianDifficulty !== undefined ? String(medianDifficulty) : "—"],
+    ];
+
+    const footer = buildFreshnessFooter({
+      source: "local",
+      upstreamCalls: 0,
+      partial: false,
+    });
+
+    const siteLabel = site === "codeforces" ? "Codeforces" : "AtCoder";
+    const text = [
+      `${siteLabel} problem catalogue snapshot (as of ${snapshotAt})`,
+      "",
+      formatMarkdownTable(["Metric", "Value"], rows),
+      "",
+      footer,
+    ].join("\n");
+
+    return text;
+  }
+
+  function buildUserSolvedSnapshot(site: "codeforces" | "atcoder", handle: string) {
+    const db = getDb();
+
+    const { total } = db
+      .prepare("SELECT COUNT(*) as total FROM user_solved WHERE site = ? AND handle = ?")
+      .get(site, handle) as { total: number };
+
+    const footer = buildFreshnessFooter({
+      source: "local",
+      upstreamCalls: 0,
+      partial: false,
+    });
+
+    const siteLabel = site === "codeforces" ? "Codeforces" : "AtCoder";
+
+    if (total === 0) {
+      return [
+        `No solved problems recorded for ${siteLabel} handle **${handle}** in the local cache. Run cp_verify_solved_${site} to sync submissions.`,
+        "",
+        footer,
+      ].join("\n");
+    }
+
+    const recent = db
+      .prepare(
+        "SELECT problem_id, first_ac_at, attempts FROM user_solved WHERE site = ? AND handle = ? ORDER BY first_ac_at DESC LIMIT 50"
+      )
+      .all(site, handle) as Array<{ problem_id: string; first_ac_at: number | null; attempts: number | null }>;
+
+    const rows = recent.map((r) => [
+      r.problem_id,
+      r.first_ac_at ? new Date(r.first_ac_at * 1000).toISOString().substring(0, 16).replace("T", " ") + " UTC" : "—",
+      r.attempts !== null ? String(r.attempts) : "—",
+    ]);
+
+    const shownNote = total > recent.length ? ` (showing ${recent.length} most recent of ${total})` : "";
+    const text = [
+      `${siteLabel} solved problems for **${handle}**: ${total} total${shownNote}`,
+      "",
+      formatMarkdownTable(["Problem", "First AC (UTC)", "Attempts"], rows),
+      "",
+      footer,
+    ].join("\n");
+
+    return text;
+  }
+
+  server.registerResource(
+    "cp_problems_snapshot_codeforces",
+    "cp://problems/snapshot_codeforces",
+    {
+      title: "Codeforces problem catalogue snapshot",
+      description: "Summary stats (counts, difficulty range/median, freshness) for the cached Codeforces problem catalogue.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "text/markdown",
+          text: buildProblemsSnapshot("codeforces"),
+        },
+      ],
+    })
+  );
+
+  server.registerResource(
+    "cp_problems_snapshot_atcoder",
+    "cp://problems/snapshot_atcoder",
+    {
+      title: "AtCoder problem catalogue snapshot",
+      description: "Summary stats (counts, difficulty range/median, freshness) for the cached AtCoder problem catalogue.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "text/markdown",
+          text: buildProblemsSnapshot("atcoder"),
+        },
+      ],
+    })
+  );
+
+  server.registerResource(
+    "cp_user_codeforces_solved",
+    new ResourceTemplate("cp://user/codeforces/{handle}/solved", { list: undefined }),
+    {
+      title: "Codeforces user solved problems",
+      description: "Solved-problem summary from the local cache for a Codeforces handle, most recent first (up to 50 shown).",
+      mimeType: "text/markdown",
+    },
+    async (uri, variables) => {
+      const rawHandle = variables.handle;
+      const handleFromUri = Array.isArray(rawHandle) ? rawHandle[0] : rawHandle;
+      const handle = resolveHandle("codeforces", handleFromUri);
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "text/markdown",
+            text: buildUserSolvedSnapshot("codeforces", handle),
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerResource(
+    "cp_user_atcoder_solved",
+    new ResourceTemplate("cp://user/atcoder/{handle}/solved", { list: undefined }),
+    {
+      title: "AtCoder user solved problems",
+      description: "Solved-problem summary from the local cache for an AtCoder handle, most recent first (up to 50 shown).",
+      mimeType: "text/markdown",
+    },
+    async (uri, variables) => {
+      const rawHandle = variables.handle;
+      const handleFromUri = Array.isArray(rawHandle) ? rawHandle[0] : rawHandle;
+      const handle = resolveHandle("atcoder", handleFromUri);
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "text/markdown",
+            text: buildUserSolvedSnapshot("atcoder", handle),
+          },
+        ],
+      };
+    }
   );
 
   return server;
