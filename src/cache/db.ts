@@ -1,4 +1,7 @@
 import Database from "better-sqlite3";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 let dbInstance: Database.Database | null = null;
 
@@ -6,11 +9,17 @@ export function getDbPath(): string {
   if (process.env.NODE_ENV === "test") {
     return ":memory:";
   }
-  return process.env.CP_MCP_DB_PATH || "cache.db";
+  return process.env.CP_MCP_DB_PATH || path.join(os.homedir(), ".cp-mcp", "cache.db");
 }
 
 export function initDb(dbPath?: string): Database.Database {
   const targetPath = dbPath || getDbPath();
+
+  // Ensure the parent directory exists before opening — better-sqlite3 will not create it.
+  if (targetPath !== ":memory:") {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  }
+
   const db = new Database(targetPath);
 
   // WAL mode for concurrency, except in-memory DBs where it has no effect/is not supported
