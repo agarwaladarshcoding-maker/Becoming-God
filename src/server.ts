@@ -27,6 +27,10 @@ import {
   handleVerifySolvedCodeforces,
 } from "./tools/verifySolvedCodeforces.js";
 import {
+  upcomingContestsCodeforcesSchema,
+  handleUpcomingContestsCodeforces,
+} from "./tools/upcomingContestsCodeforces.js";
+import {
   getUserAtcoderSchema,
   handleGetUserAtcoder,
 } from "./tools/getUserAtcoder.js";
@@ -246,7 +250,24 @@ export function buildServer(): McpServer {
     handleVerifySolvedCodeforces
   );
 
-  
+  // Register cp_upcoming_contests_codeforces tool
+  registerCpTool(
+    server,
+    "cp_upcoming_contests_codeforces",
+    {
+      description:
+        "List upcoming Codeforces rounds within a time window, with start times in a requested timezone and duration. Use for scheduling practice. Only future contests are returned; for past contests and rating changes use cp_rating_history_codeforces instead. rated_only is best-effort: contest.list exposes no ratedness field, so this filters on contest type (CF/ICPC/IOI) rather than a true rated flag.",
+      inputSchema: upcomingContestsCodeforcesSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    handleUpcomingContestsCodeforces
+  );
+
+
   // Register cp_analyze_weaknesses_codeforces tool
   registerCpTool(
     server,
