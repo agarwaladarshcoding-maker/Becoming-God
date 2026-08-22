@@ -2,11 +2,13 @@ import { z } from "zod";
 import { acCall } from "../upstream/atcoder.js";
 import { getCachedOrFetch } from "../cache/kv.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const getUserAtcoderSchema = z.object({
   handle: z
     .string()
-    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle format"),
+    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle format")
+    .optional(),
 });
 
 type GetUserAtcoderArgs = z.infer<typeof getUserAtcoderSchema>;
@@ -18,7 +20,7 @@ interface AcRankEntry {
 }
 
 export async function handleGetUserAtcoder(args: GetUserAtcoderArgs) {
-  const { handle } = args;
+  const handle = resolveHandle("atcoder", args.handle);
 
   try {
     const cacheKey = `ac:user-rank:${handle.toLowerCase()}`;

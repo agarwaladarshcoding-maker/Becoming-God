@@ -4,24 +4,26 @@ import { getDb } from "../cache/db.js";
 import { syncUserSubmissions } from "../cache/sync.js";
 import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export function registerGetSubmissionsCodeforces(server: McpServer) {
   server.tool(
     "cp_get_submissions_codeforces",
-    "List a handle's recent Codeforces submissions, newest first, with verdicts. Use for 'what did I attempt on Codeforces', debugging patterns or language stats. For a yes/no answer about specific problems use cp_verify_solved_codeforces, which is cheaper and exact.",
+    "List a handle's recent Codeforces submissions, newest first, with verdicts. Use for 'what did I attempt on Codeforces', debugging patterns or language stats. For a yes/no answer about specific problems use cp_verify_solved_codeforces, which is cheaper and exact. handle is optional and defaults to the configured user (CP_MCP_CF_HANDLE) when omitted.",
     {
-      handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/),
+      handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/).optional(),
       since: z.string().optional().describe("ISO date or relative like '7d'."),
       verdict: z.enum(["any", "accepted", "failed"]).default("any"),
       problem: z.string().optional().describe("Optional: restrict to one problem id."),
       limit: z.number().int().min(1).max(50).default(20),
     },
     async (args) => {
-      const syncStatus = await syncUserSubmissions("codeforces", args.handle);
+      const handle = resolveHandle("codeforces", args.handle);
+      const syncStatus = await syncUserSubmissions("codeforces", handle);
       const db = getDb();
 
       let query = "SELECT * FROM submissions WHERE site = 'codeforces' AND handle = ?";
-      const params: any[] = [args.handle];
+      const params: any[] = [handle];
 
       if (args.problem) {
          let p = args.problem.toLowerCase();

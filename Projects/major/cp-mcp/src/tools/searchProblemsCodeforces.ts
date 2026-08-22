@@ -15,7 +15,12 @@ export const searchProblemsCodeforcesSchema = z.object({
   max_difficulty: z.number().int().min(0).max(4000),
   tags: z.array(z.string()).optional(),
   tag_mode: z.enum(["any", "all"]).default("any"),
-  exclude_solved_by: z.string().optional(),
+  exclude_solved_by: z
+    .string()
+    .optional()
+    .describe(
+      "Codeforces handle to exclude already-solved problems for. Pass the configured user's handle explicitly if you want that behavior; omitted, no exclusion is applied."
+    ),
   min_solved_count: z.number().int().default(200),
   limit: z.number().int().min(1).max(25).default(10),
   seed: z.number().int().optional(),

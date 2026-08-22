@@ -3,15 +3,16 @@ import { getDb } from "../cache/db.js";
 import { syncUserSubmissions } from "../cache/sync.js";
 import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const analyzeWeaknessesCodeforcesSchema = z.object({
-  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle"),
+  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle").optional(),
 });
 
 type AnalyzeWeaknessesCodeforcesArgs = z.infer<typeof analyzeWeaknessesCodeforcesSchema>;
 
 export async function handleAnalyzeWeaknessesCodeforces(args: AnalyzeWeaknessesCodeforcesArgs) {
-  const { handle } = args;
+  const handle = resolveHandle("codeforces", args.handle);
 
   const syncStatus = await syncUserSubmissions("codeforces", handle);
   const db = getDb();

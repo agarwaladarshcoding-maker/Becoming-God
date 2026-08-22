@@ -3,11 +3,13 @@ import { cfCall } from "../upstream/codeforces.js";
 import { cfUserToProfile } from "../domain/normalize.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
 import { RawCfUser } from "../domain/types.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const getUserCodeforcesSchema = z.object({
   handle: z
     .string()
-    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle format"),
+    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle format")
+    .optional(),
 });
 
 type GetUserCodeforcesArgs = z.infer<typeof getUserCodeforcesSchema>;
@@ -17,7 +19,7 @@ type GetUserCodeforcesArgs = z.infer<typeof getUserCodeforcesSchema>;
  * Fetches user info from Codeforces user.info and returns normalised profile.
  */
 export async function handleGetUserCodeforces(args: GetUserCodeforcesArgs) {
-  const { handle } = args;
+  const handle = resolveHandle("codeforces", args.handle);
 
   try {
     const rawUsers = await cfCall<RawCfUser[]>("user.info", {
