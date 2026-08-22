@@ -13,12 +13,12 @@ export const upcomingContestsAtcoderSchema = z.object({
 
 type UpcomingContestsAtcoderArgs = z.infer<typeof upcomingContestsAtcoderSchema>;
 
-interface AcContest {
+interface AcUpcomingContest {
   id: string;
-  start_epoch_second: number;
-  duration_second: number;
   title: string;
-  rate_change: string;
+  startEpochSecond: number;
+  durationSecond: number;
+  ratedRange: string;
 }
 
 function formatDuration(seconds: number): string {
@@ -44,8 +44,57 @@ function formatInTimezone(epochSec: number, tz: string): string {
   }
 }
 
-function isRated(rateChange: string): boolean {
-  return rateChange !== "-" && rateChange !== "";
+function isRated(ratedRange: string): boolean {
+  return ratedRange !== "-" && ratedRange !== "";
+}
+
+/**
+ * Scrapes the "Upcoming Contests" table from atcoder.jp/contests/. There is no
+ * official JSON feed for this (kenkoooo's contests.json is a historical archive
+ * with no future contests) so we parse the HTML directly. Returns [] if the
+ * page layout no longer matches what we expect — callers must treat that as a
+ * parse failure, not "no contests".
+ */
+function parseUpcomingContests(html: string): AcUpcomingContest[] {
+  const markerIdx = html.indexOf("contest-table-upcoming");
+  if (markerIdx === -1) return [];
+  const tableEndIdx = html.indexOf("</table>", markerIdx);
+  const section = tableEndIdx === -1 ? html.slice(markerIdx) : html.slice(markerIdx, tableEndIdx);
+
+  const rows: AcUpcomingContest[] = [];
+  const rowRe = /<tr>([\s\S]*?)<\/tr>/g;
+  let rowMatch: RegExpExecArray | null;
+  while ((rowMatch = rowRe.exec(section)) !== null) {
+    const rowHtml = rowMatch[1];
+    const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
+    const tds: string[] = [];
+    let tdMatch: RegExpExecArray | null;
+    while ((tdMatch = tdRe.exec(rowHtml)) !== null) {
+      tds.push(tdMatch[1]);
+    }
+    if (tds.length < 4) continue; // header row or malformed row, skip
+
+    const timeMatch = tds[0].match(/<time[^>]*>([^<]+)<\/time>/);
+    const linkMatch = tds[1].match(/href="\/contests\/([a-zA-Z0-9_-]+)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!timeMatch || !linkMatch) continue;
+
+    const startDate = new Date(timeMatch[1].trim());
+    if (isNaN(startDate.getTime())) continue;
+
+    const durMatch = tds[2].trim().match(/(\d+):(\d+)/);
+    const durationSecond = durMatch
+      ? parseInt(durMatch[1], 10) * 3600 + parseInt(durMatch[2], 10) * 60
+      : 0;
+
+    rows.push({
+      id: linkMatch[1],
+      title: linkMatch[2].replace(/<[^>]+>/g, "").trim(),
+      startEpochSecond: Math.floor(startDate.getTime() / 1000),
+      durationSecond,
+      ratedRange: tds[3].replace(/<[^>]+>/g, "").trim(),
+    });
+  }
+  return rows;
 }
 
 export async function handleUpcomingContestsAtcoder(args: UpcomingContestsAtcoderArgs) {
@@ -57,20 +106,20 @@ export async function handleUpcomingContestsAtcoder(args: UpcomingContestsAtcode
   let source: "cache" | "live" = "cache";
   let upstreamCalls = 0;
 
-  let contests: AcContest[];
+  let contests: AcUpcomingContest[];
   try {
-    const result = await getCachedOrFetch<AcContest[]>(
-      "ac:catalogue:contests",
-      12 * 3600,
+    const result = await getCachedOrFetch<string>(
+      "ac:contests:upcoming",
+      15 * 60,
       async () => {
-        const resp = await politeFetch("https://kenkoooo.com/atcoder/resources/contests.json");
-        if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching contests.json`);
-        const data = await resp.json() as AcContest[];
-        return { data };
+        const resp = await politeFetch("https://atcoder.jp/contests/");
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching atcoder.jp/contests/`);
+        const html = await resp.text();
+        return { data: html };
       }
     );
     if (result.source === "live") { source = "live"; upstreamCalls++; }
-    contests = result.data ?? [];
+    contests = parseUpcomingContests(result.data ?? "");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
@@ -80,10 +129,21 @@ export async function handleUpcomingContestsAtcoder(args: UpcomingContestsAtcode
     };
   }
 
+  if (contests.length === 0) {
+    return {
+      content: [{
+        type: "text" as const,
+        text: "Failed to parse AtCoder contests: the atcoder.jp/contests/ page layout appears to have changed.",
+      }],
+      isError: true,
+      structuredContent: { contests: [], source, upstreamCalls, partial: false },
+    };
+  }
+
   const upcoming = contests
-    .filter(c => c.start_epoch_second >= nowSec && c.start_epoch_second <= windowEnd)
-    .filter(c => !rated_only || isRated(c.rate_change))
-    .sort((a, b) => a.start_epoch_second - b.start_epoch_second)
+    .filter(c => c.startEpochSecond >= nowSec && c.startEpochSecond <= windowEnd)
+    .filter(c => !rated_only || isRated(c.ratedRange))
+    .sort((a, b) => a.startEpochSecond - b.startEpochSecond)
     .slice(0, limit);
 
   const footer = buildFreshnessFooter({ source, upstreamCalls, partial: false });
@@ -101,9 +161,9 @@ export async function handleUpcomingContestsAtcoder(args: UpcomingContestsAtcode
   const rows = upcoming.map(c => [
     `[${c.id}](https://atcoder.jp/contests/${c.id})`,
     c.title,
-    c.rate_change === "-" ? "unrated" : c.rate_change,
-    formatInTimezone(c.start_epoch_second, timezone),
-    formatDuration(c.duration_second),
+    c.ratedRange === "-" ? "unrated" : c.ratedRange,
+    formatInTimezone(c.startEpochSecond, timezone),
+    formatDuration(c.durationSecond),
   ]);
 
   const text = [
@@ -120,9 +180,9 @@ export async function handleUpcomingContestsAtcoder(args: UpcomingContestsAtcode
       contests: upcoming.map(c => ({
         id: c.id,
         title: c.title,
-        rateChange: c.rate_change,
-        startEpochSecond: c.start_epoch_second,
-        durationSecond: c.duration_second,
+        ratedRange: c.ratedRange,
+        startEpochSecond: c.startEpochSecond,
+        durationSecond: c.durationSecond,
       })),
       source,
       upstreamCalls,

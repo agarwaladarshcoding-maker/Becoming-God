@@ -50,6 +50,10 @@ import {
   verifySolvedAtcoderSchema,
   handleVerifySolvedAtcoder,
 } from "./tools/verifySolvedAtcoder.js";
+import {
+  upcomingContestsAtcoderSchema,
+  handleUpcomingContestsAtcoder,
+} from "./tools/upcomingContestsAtcoder.js";
 import { registerGetSubmissionsCodeforces } from "./tools/getSubmissionsCodeforces.js";
 import { registerGetSubmissionsAtcoder } from "./tools/getSubmissionsAtcoder.js";
 import { analyzeWeaknessesCodeforcesSchema, handleAnalyzeWeaknessesCodeforces } from "./tools/analyzeWeaknessesCodeforces.js";
@@ -367,6 +371,23 @@ export function buildServer(): McpServer {
       },
     },
     handleVerifySolvedAtcoder
+  );
+
+  // Register cp_upcoming_contests_atcoder tool
+  registerCpTool(
+    server,
+    "cp_upcoming_contests_atcoder",
+    {
+      description:
+        "List upcoming AtCoder contests within a time window, with start times in a requested timezone and duration. Use for scheduling practice. Only future contests are returned; for past contests and rating changes use cp_rating_history_atcoder instead. The rated column reports AtCoder's own rated range verbatim (e.g. 'All', '- 1999', '1600 - 2999').",
+      inputSchema: upcomingContestsAtcoderSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    handleUpcomingContestsAtcoder
   );
 
   registerGetSubmissionsAtcoder(server);
