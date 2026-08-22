@@ -45,7 +45,7 @@ export interface VerificationResult {
   problemId: string;
   problemName: string;
   url: string;
-  status: "solved" | "attempted" | "untouched";
+  status: "solved" | "attempted" | "untouched" | "unknown";
   firstAcAt?: string;
   attempts: number;
   distinctVerdicts: string[];
