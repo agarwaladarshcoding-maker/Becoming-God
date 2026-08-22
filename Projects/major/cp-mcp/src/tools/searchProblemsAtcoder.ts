@@ -24,9 +24,9 @@ interface MergedProblem {
   problem_index: string;
   name: string;
   solver_count: number | null;
-  difficulty: number | null;
-  is_experimental: boolean;
 }
+
+type ProblemModels = Record<string, { difficulty?: number | null; is_experimental?: boolean }>;
 
 function normalizeAcDifficulty(d: number): number {
   const raw = d < 400 ? 800 + d * 0.5 : d + 400;
@@ -48,6 +48,18 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
     }
   );
   if (mergedSource === "live") { upstreamCalls++; source = "live"; }
+
+  const { data: models, source: modelsSource } = await getCachedOrFetch<ProblemModels>(
+    "ac:catalogue:problem-models",
+    24 * 3600,
+    async () => {
+      const resp = await politeFetch("https://kenkoooo.com/atcoder/resources/problem-models.json");
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching problem-models.json`);
+      const data = await resp.json() as ProblemModels;
+      return { data };
+    }
+  );
+  if (modelsSource === "live") { upstreamCalls++; source = "live"; }
 
   if (!merged || merged.length === 0) return { source, upstreamCalls };
 
@@ -74,7 +86,8 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
       const siteId = p.id; // p.id is already "abc300_c" — the full problem id
       const id = `ac:${siteId}`;
       const url = `https://atcoder.jp/contests/${p.contest_id}/tasks/${p.id}`;
-      const cfDiff = p.difficulty != null ? normalizeAcDifficulty(p.difficulty) : null;
+      const rawDifficulty = models?.[p.id]?.difficulty;
+      const cfDiff = rawDifficulty != null ? normalizeAcDifficulty(rawDifficulty) : null;
 
       insertStmt.run(
         id,
@@ -84,8 +97,8 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
         url,
         p.contest_id,
         cfDiff,
-        p.difficulty != null ? "estimated" : "unknown",
-        p.is_experimental ? "low" : "high",
+        rawDifficulty != null ? "estimated" : "unknown",
+        models?.[p.id]?.is_experimental === true ? "low" : "high",
         "[]",
         p.solver_count ?? null,
         null,
