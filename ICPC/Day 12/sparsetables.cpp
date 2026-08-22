@@ -1,40 +1,42 @@
-#include <bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <set>
+#include <queue>
+#include <stack>
+
 using namespace std;
 
-const int MAXN = 100005;
-const int LOG  = 17;   // 2^17 > 100000, enough for MAXN
-
-int sparse[MAXN][LOG];
-int arr[MAXN];
-int logTable[MAXN];
-
-// Precompute log2 values for O(1) lookup during queries
-void buildLogTable(int n) {
+#define fast_io ios_base::sync_with_stdio(false); cin.tie(NULL); cout.tie(NULL)
+vector<long long> logTable(17);
+vector<vector<long long>> sparseTable(100005, vector<long long>(17));
+vector<long long> arr(100005);
+void buildLogTable(int n){
     logTable[1] = 0;
-    for (int i = 2; i <= n; i++)
-        logTable[i] = logTable[i / 2] + 1;
-}
-
-// Build the sparse table
-void buildSparseTable(int n) {
-    // Base case: ranges of length 1 (2^0)
-    for (int i = 0; i < n; i++)
-        sparse[i][0] = arr[i];
-
-    // Fill in increasing order of range length (2^j)
-    for (int j = 1; (1 << j) <= n; j++) {
-        for (int i = 0; i + (1 << j) - 1 < n; i++) {
-            sparse[i][j] = min(sparse[i][j - 1],
-                                sparse[i + (1 << (j - 1))][j - 1]);
-        }
+    for(int i= 2;i<=n;i++){
+        logTable[i] = logTable[i/2] +1;
     }
 }
-
-// Answer a range minimum query [L, R] in O(1)
-int query(int L, int R) {
-    int len = R - L + 1;
-    int k = logTable[len];          // largest k with 2^k <= len
-    return min(sparse[L][k], sparse[R - (1 << k) + 1][k]);
+void buildSparseTable(int n ){
+    for (int i = 0; i < n; i++)
+    {
+        sparseTable[i][0] = arr[i];
+    }
+    for(int j = 1;(1<<j)<=n;j++){
+        for(int i = 0;i+ (1<<j) - 1<n;i++){
+            sparseTable[i][j] = min(sparseTable[i][j-1], sparseTable[i + (1<<(j-1))][j-1]);
+        }
+    }  
+}
+long long getAns(long long l, long long r ){
+    long long ans = 0;
+    long long length = r - l +1;
+    long long k = logTable[length];
+    ans = min(sparseTable[l][k] , sparseTable[r - (1<<k)+1][k]);
+    return ans;
 }
 
 int main() {
@@ -51,7 +53,7 @@ int main() {
     while (q--) {
         int L, R;
         cin >> L >> R;              // 0-indexed, inclusive
-        cout << query(L, R) << "\n";
+        cout << getAns(L, R) << "\n";
     }
     return 0;
 }

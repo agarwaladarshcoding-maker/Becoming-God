@@ -31,7 +31,7 @@ void solve() {
             int left = st;
             int right = st;
             int j =0;
-            while(j<n){
+            while(j<t.length()){
                 
             }
             
