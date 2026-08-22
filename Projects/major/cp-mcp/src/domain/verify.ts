@@ -10,9 +10,10 @@ export function verifySubmissionChain(
     problemName: string,
     url: string,
     submissions: Submission[],
-    sinceEpoch: number
+    sinceEpoch: number,
+    historyComplete: boolean = true
 ): VerificationResult {
-    let status: "solved" | "attempted" | "untouched" = "untouched";
+    let status: "solved" | "attempted" | "untouched" | "unknown" = "untouched";
     let firstAcAt: string | undefined;
     let attempts = 0;
     const distinctVerdicts = new Set<string>();
@@ -21,7 +22,12 @@ export function verifySubmissionChain(
     // Filter submissions for this problem
     const probSubmissions = submissions.filter(s => s.problemId === problemId);
 
-    if (probSubmissions.length > 0) {
+    if (probSubmissions.length === 0 && !historyComplete) {
+        // No evidence either way: an incomplete history can fail to contain a
+        // submission, but it can never invent one — so absence here means
+        // "not yet known", not "never attempted".
+        status = "unknown";
+    } else if (probSubmissions.length > 0) {
         status = "attempted";
         attempts = probSubmissions.length;
 
