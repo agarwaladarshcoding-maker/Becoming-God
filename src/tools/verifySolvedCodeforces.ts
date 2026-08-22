@@ -5,9 +5,10 @@ import { parseCodeforcesProblem } from "../domain/normalize.js";
 import { verifySubmissionChain } from "../domain/verify.js";
 import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const verifySolvedCodeforcesSchema = z.object({
-  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle"),
+  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle").optional(),
   problems: z
     .array(z.string().min(1))
     .min(1)
@@ -21,7 +22,8 @@ export const verifySolvedCodeforcesSchema = z.object({
 type VerifySolvedCodeforcesArgs = z.infer<typeof verifySolvedCodeforcesSchema>;
 
 export async function handleVerifySolvedCodeforces(args: VerifySolvedCodeforcesArgs) {
-  const { handle, problems, since } = args;
+  const { problems, since } = args;
+  const handle = resolveHandle("codeforces", args.handle);
 
   let sinceEpoch = 0;
   if (since) {

@@ -5,9 +5,10 @@ import { parseAtcoderProblem } from "../domain/normalize.js";
 import { verifySubmissionChain } from "../domain/verify.js";
 import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const verifySolvedAtcoderSchema = z.object({
-  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle"),
+  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle").optional(),
   problems: z
     .array(z.string().min(1))
     .min(1)
@@ -21,7 +22,8 @@ export const verifySolvedAtcoderSchema = z.object({
 type VerifySolvedAtcoderArgs = z.infer<typeof verifySolvedAtcoderSchema>;
 
 export async function handleVerifySolvedAtcoder(args: VerifySolvedAtcoderArgs) {
-  const { handle, problems, since } = args;
+  const { problems, since } = args;
+  const handle = resolveHandle("atcoder", args.handle);
 
   let sinceEpoch = 0;
   if (since) {

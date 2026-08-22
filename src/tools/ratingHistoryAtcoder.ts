@@ -3,11 +3,13 @@ import { politeFetch } from "../upstream/http.js";
 import { getCachedOrFetch } from "../cache/kv.js";
 import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const ratingHistoryAtcoderSchema = z.object({
   handle: z
     .string()
-    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle format"),
+    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle format")
+    .optional(),
   limit: z.number().int().min(1).max(50).default(15),
   summary_only: z.boolean().default(false),
 });
@@ -28,7 +30,8 @@ interface AcHistoryEntry {
 }
 
 export async function handleRatingHistoryAtcoder(args: RatingHistoryAtcoderArgs) {
-  const { handle, limit, summary_only } = args;
+  const { limit, summary_only } = args;
+  const handle = resolveHandle("atcoder", args.handle);
 
   try {
     const cacheKey = `ac:rating-history:${handle.toLowerCase()}`;

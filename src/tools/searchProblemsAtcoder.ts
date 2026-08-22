@@ -10,7 +10,12 @@ import { politeFetch } from "../upstream/http.js";
 export const searchProblemsAtcoderSchema = z.object({
   min_difficulty: z.number().int().min(0).max(4000),
   max_difficulty: z.number().int().min(0).max(4000),
-  exclude_solved_by: z.string().optional(),
+  exclude_solved_by: z
+    .string()
+    .optional()
+    .describe(
+      "AtCoder handle to exclude already-solved problems for. Pass the configured user's handle explicitly if you want that behavior; omitted, no exclusion is applied."
+    ),
   min_solver_count: z.number().int().default(0),
   limit: z.number().int().min(1).max(25).default(10),
   seed: z.number().int().optional(),

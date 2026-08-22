@@ -3,15 +3,16 @@ import { getDb } from "../cache/db.js";
 import { syncUserSubmissions } from "../cache/sync.js";
 import { formatMarkdownTable } from "../format/table.js";
 import { buildFreshnessFooter } from "../format/freshness.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const analyzeWeaknessesAtcoderSchema = z.object({
-  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle"),
+  handle: z.string().regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid AtCoder handle").optional(),
 });
 
 type AnalyzeWeaknessesAtcoderArgs = z.infer<typeof analyzeWeaknessesAtcoderSchema>;
 
 export async function handleAnalyzeWeaknessesAtcoder(args: AnalyzeWeaknessesAtcoderArgs) {
-  const { handle } = args;
+  const handle = resolveHandle("atcoder", args.handle);
 
   const syncStatus = await syncUserSubmissions("atcoder", handle);
   const db = getDb();

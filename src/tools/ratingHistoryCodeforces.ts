@@ -7,11 +7,13 @@ import {
   RawCfRatingChange,
   computeCfRatingStats,
 } from "../domain/analytics.js";
+import { resolveHandle } from "../domain/config.js";
 
 export const ratingHistoryCodeforcesSchema = z.object({
   handle: z
     .string()
-    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle format"),
+    .regex(/^[A-Za-z0-9_.-]{1,32}$/, "Invalid Codeforces handle format")
+    .optional(),
   limit: z.number().int().min(1).max(50).default(15),
   summary_only: z.boolean().default(false),
 });
@@ -23,7 +25,8 @@ type RatingHistoryCodeforcesArgs = z.infer<
 export async function handleRatingHistoryCodeforces(
   args: RatingHistoryCodeforcesArgs
 ) {
-  const { handle, limit, summary_only } = args;
+  const { limit, summary_only } = args;
+  const handle = resolveHandle("codeforces", args.handle);
   const normalizedHandle = handle.toLowerCase().trim();
 
   try {
