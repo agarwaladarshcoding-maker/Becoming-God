@@ -252,8 +252,24 @@ export async function syncUserSubmissions(
 
           if (lastPageItem.creationTimeSeconds <= wm) break;
 
+          // Codeforces returns a short final page once history is exhausted.
+          // That is the real end-of-data terminator; without it, a handle
+          // with a history longer than the cap below would still look
+          // "complete" once it hit that cap, because hitting the cap and
+          // hitting real end-of-data are otherwise indistinguishable here.
+          if (page.length < count) break;
+
           cfFrom += count;
-          if (cfFrom > 10000) break; // safety cap
+          // Runaway guard only — not a history limit. Terminating on this
+          // cap is indistinguishable from terminating on real end-of-data
+          // (both exit the loop without hitTimeLimit), so the watermark
+          // gets written and `complete: true` is returned for a truncated
+          // history. That makes the verifier print "untouched" for solves
+          // it never actually fetched. Set high enough that a legitimate
+          // account never reaches it; it exists only to stop an infinite
+          // loop against a pathological upstream that keeps returning full
+          // pages forever.
+          if (cfFrom > 200000) break;
        }
     } else if (site === "atcoder") {
       while (true) {
@@ -342,7 +358,11 @@ export async function syncUserSubmissions(
          try {
            let remainingCalls = 0;
            let hit = true;
-           while (hit && remainingCalls < 50) { 
+           // Must agree with the 200,000 runaway guard above: at 200 rows
+           // per call, 1000 calls covers the same ceiling. A lower cap here
+           // would silently reintroduce the truncation the guard was just
+           // raised to avoid.
+           while (hit && remainingCalls < 1000) {
              const res = await performSync(10000); // 10s chunks
              remainingCalls += res.calls;
              hit = res.hitTimeLimit;
