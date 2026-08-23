@@ -65,9 +65,9 @@ Milestones track against `docs/05-BUILD-PLAN.md`. Each task uses `[x]` (done) or
 - [x] `domain/verify.ts`: exact semantics (OK + testset TESTS / result AC, attempts, first AC, `withinWindow`)
 - [x] Implement `tools/verifySolvedCodeforces.ts` (T6-CF) & `tools/verifySolvedAtcoder.ts` (T6-AC)
 - [x] Implement `tools/getSubmissionsCodeforces.ts` (T5-CF) & `tools/getSubmissionsAtcoder.ts` (T5-AC)
-- [ ] **Manual audit: 50 problems checked against the site UI. Must be 100%.**
+- [x] **Manual audit: 53 problems checked against the Codeforces site UI, 53/53 agree (2026-08-23). AtCoder half blocked — see `audit_results.md`.**
 
-**Gate:** `cp_verify_solved_codeforces` and `cp_verify_solved_atcoder` on yesterday's problem list return a correct table, and the 50-problem audit passes with zero disagreements. **Tools are implemented and work on spot checks; the manual audit has never been run** — every checkbox in `audit_results.md` is unticked, and it lists 40 rows, not 50. This is the M4 gate and it is outstanding.
+**Gate:** `cp_verify_solved_codeforces` and `cp_verify_solved_atcoder` on yesterday's problem list return a correct table, and the 50-problem audit passes with zero disagreements. **The Codeforces half passed on 2026-08-23: 53 rows checked against `codeforces.com/submissions/AdarshAg/contest/<id>`, 53/53 agreement on status, attempt count and first-AC timestamp.** The AtCoder half could not be run — every AtCoder page exposing per-user submissions requires a signed-in account, so the AtCoder verifier's *logic* is audited (shared `verifySubmissionChain`, plus `test/verify.test.ts`) while its *upstream* (the kenkoooo mirror) is trusted rather than verified. Full method, row list and the block evidence are in `audit_results.md`.
 
 ---
 
@@ -126,7 +126,7 @@ The M3/M4/M5/M6 ticks above changed because of a review pass that found and fixe
   config, so tools no longer require a `handle` argument on every call.
 - **Repo hygiene.** 19 tracked scratch/patch files were deleted; the 8MB `cache.db` was untracked.
 
-None of this constitutes the M4 manual audit — that is still outstanding (see M4 above).
+None of this constituted the M4 manual audit; that was run separately on 2026-08-23 (see M4 above).
 
 ---
 
@@ -174,8 +174,8 @@ that were sitting unused. Seven commits, `cp-mcp-fixes` branch.
   submission is still judging, and `better-sqlite3` rejects `undefined` bind parameters; both now coalesce
   to `null`.
 
-None of this constitutes the M4 manual audit either — it is still outstanding (see M4 above), and this pass
-is what makes a cold verify trustworthy enough to run that audit against.
+None of this constituted the M4 manual audit either — but it is what made a cold verify trustworthy enough
+to run that audit against, which happened later the same day (see M4 above and `audit_results.md`).
 
 ---
 
@@ -187,7 +187,7 @@ is what makes a cold verify trustworthy enough to run that audit against.
 | M1 First real tool | ✓ Done |
 | M2 Cache + CF search | ✓ Done |
 | M3 AtCoder + unified model | ✓ Done — AtCoder difficulty fixed 2026-08-23 (was NULL, now populated); upcoming-contests tools (T7) registered 2026-08-23 |
-| M4 Verification + submissions | Tools done; `unknown` status added 2026-08-23 so absent history can't read as "not solved"; **50-problem manual audit still not run** — M4 gate outstanding |
+| M4 Verification + submissions | Tools done; `unknown` status added 2026-08-23 so absent history can't read as "not solved"; **manual audit run 2026-08-23 — Codeforces 53/53 against the site UI; AtCoder blocked by login wall** |
 | M5 Remote transport | Local stdio entrypoint fixed 2026-08-23; **not deployed**, remote clients not connected |
 | M6 Analytics + publish | Resources fixed 2026-08-23 and now working; **not published to npm/MCP registry** |
 | M7 Hardening | ✓ Done |
