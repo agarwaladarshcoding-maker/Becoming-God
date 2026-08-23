@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "eslint \"src/**/*.ts\"",
-    "install:local": "npm run build && node --import tsx scripts/install-local.ts"
+    "install:local": "npm run build && node --import tsx scripts/install-local.ts",
+    "backup": "node --import tsx scripts/backup-cache.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
