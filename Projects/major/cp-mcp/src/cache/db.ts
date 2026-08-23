@@ -85,6 +85,12 @@ export function initDb(dbPath?: string): Database.Database {
       participation TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_submissions_handle ON submissions(handle);
+
+    CREATE TABLE IF NOT EXISTS sync_lock (
+      key        TEXT PRIMARY KEY,
+      holder     TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
   `);
 
   return db;

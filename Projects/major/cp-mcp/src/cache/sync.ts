@@ -3,6 +3,7 @@ import { cfCall } from "../upstream/codeforces.js";
 import { acCall } from "../upstream/atcoder.js";
 import { getDbKv, setDbKv } from "./kv.js";
 import { Submission, Site } from "../domain/types.js";
+import { acquireLock, refreshLock, releaseLock } from "./lock.js";
 
 /**
  * A row from Codeforces `user.status`. `verdict` and `testset` are optional
@@ -340,7 +341,24 @@ export async function syncUserSubmissions(
   if (wm === 0) {
     // Cold handle: do a partial sync and background the rest
     currentlySyncing.add(syncKey);
-    
+
+    // Cross-process lease: with three local processes sharing this cache.db,
+    // each running its own per-process Codeforces/AtCoder throttle, only the
+    // lease holder is allowed to hit upstream for this handle. See lock.ts.
+    const lockKey = `sync:${site}:${handle}`;
+    const holder = acquireLock(db, lockKey, 90);
+    if (!holder) {
+      currentlySyncing.delete(syncKey);
+      return {
+        partial: true,
+        partialNote: "Another cp-mcp process is syncing this handle",
+        upstreamCalls: 0,
+        // Same reasoning as the in-process guard above: wm > 0 means a
+        // backfill already finished before this sync started.
+        complete: wm > 0,
+      };
+    }
+
     // Block for up to 20s on the first sync of a handle. Codeforces is throttled
     // to one request per 2100ms, so 4s bought only 2 pages (400 submissions) and
     // left most of the history missing — which surfaced as "unknown" rows on the
@@ -349,7 +367,23 @@ export async function syncUserSubmissions(
     // ever: afterwards the watermark makes a refresh a single call. The ceiling
     // is MCP client tool timeouts, which sit comfortably above this. Huge
     // histories still fall through to the background continuation below.
-    const syncRes = await performSync(20000);
+    // If this throws, both guards must be dropped before the error escapes.
+    // The lease would self-heal after its 90s TTL, but `currentlySyncing` is
+    // process-lifetime state: leaking the key wedges this handle into
+    // "Background sync still in progress" for every later call, with no
+    // background sync actually running to finish it.
+    let syncRes: { hitTimeLimit: boolean; calls: number };
+    try {
+      syncRes = await performSync(20000);
+    } catch (e) {
+      currentlySyncing.delete(syncKey);
+      try {
+        releaseLock(db, lockKey, holder);
+      } catch (releaseErr) {
+        console.error("Failed to release sync lease for", site, handle, releaseErr);
+      }
+      throw e;
+    }
     upstreamCalls += syncRes.calls;
 
     if (syncRes.hitTimeLimit) {
@@ -363,6 +397,14 @@ export async function syncUserSubmissions(
            // would silently reintroduce the truncation the guard was just
            // raised to avoid.
            while (hit && remainingCalls < 1000) {
+             // A backfill can run for minutes; refresh the lease each page
+             // so it doesn't expire mid-sync and let another process join
+             // in. If it's already gone, someone else now owns it — stop
+             // rather than race them.
+             if (!refreshLock(db, lockKey, holder, 90)) {
+               console.error("Lost sync lease for", site, handle, "- stopping background sync");
+               break;
+             }
              const res = await performSync(10000); // 10s chunks
              remainingCalls += res.calls;
              hit = res.hitTimeLimit;
@@ -372,6 +414,11 @@ export async function syncUserSubmissions(
            console.error("Background sync failed for", site, handle, e);
          } finally {
            currentlySyncing.delete(syncKey);
+           try {
+             releaseLock(db, lockKey, holder);
+           } catch (e) {
+             console.error("Failed to release sync lease for", site, handle, e);
+           }
          }
       })();
 
@@ -383,11 +430,29 @@ export async function syncUserSubmissions(
       };
     } else {
       currentlySyncing.delete(syncKey);
+      try {
+        releaseLock(db, lockKey, holder);
+      } catch (e) {
+        console.error("Failed to release sync lease for", site, handle, e);
+      }
       return { partial: false, upstreamCalls, complete: true };
     }
   } else {
     // Warm handle: full sync shouldn't take long (1-2 pages at most)
     currentlySyncing.add(syncKey);
+
+    const lockKey = `sync:${site}:${handle}`;
+    const holder = acquireLock(db, lockKey, 90);
+    if (!holder) {
+      currentlySyncing.delete(syncKey);
+      return {
+        partial: true,
+        partialNote: "Another cp-mcp process is syncing this handle",
+        upstreamCalls: 0,
+        complete: wm > 0,
+      };
+    }
+
     try {
       const syncRes = await performSync(15000);
       upstreamCalls += syncRes.calls;
@@ -400,6 +465,11 @@ export async function syncUserSubmissions(
       };
     } finally {
       currentlySyncing.delete(syncKey);
+      try {
+        releaseLock(db, lockKey, holder);
+      } catch (e) {
+        console.error("Failed to release sync lease for", site, handle, e);
+      }
     }
   }
 }
