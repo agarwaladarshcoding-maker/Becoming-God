@@ -22,8 +22,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
 const MIN_NODE_MAJOR = 22;
+
+export const SERVER_LABEL = "com.adarsh.cp-mcp.server";
+export const REFRESH_LABEL = "com.adarsh.cp-mcp.refresh";
 
 export interface McpServerEntry {
   command: string;
@@ -346,6 +350,53 @@ export function main(): void {
   console.log(reportLine(desktop));
   console.log("");
 
+  // launchd — the loopback daemon and the nightly cache warm.
+  const logDir = cpMcpHome();
+  fs.mkdirSync(logDir, { recursive: true });
+  const token = ensureAuthToken(path.join(logDir, "auth-token"));
+
+  const serverAgent = installLaunchAgent(
+    SERVER_LABEL,
+    buildServerPlist(
+      SERVER_LABEL,
+      [process.execPath, path.join(repoRoot, "dist", "http.js")],
+      {
+        PORT: "3000",
+        // Loopback, always. See the comment on resolveBindHost in src/http.ts:
+        // this daemon carries a default handle, so an all-interfaces bind
+        // would answer strangers on any network this laptop joins.
+        CP_MCP_HTTP_HOST: "127.0.0.1",
+        CP_MCP_AUTH_TOKEN: token,
+        ...entry.env,
+      },
+      path.join(logDir, "server.log")
+    ),
+    launchAgentsDir(),
+    true
+  );
+
+  const refreshAgent = installLaunchAgent(
+    REFRESH_LABEL,
+    buildRefreshPlist(
+      REFRESH_LABEL,
+      [process.execPath, "--import", "tsx", path.join(repoRoot, "scripts", "refresh-cache.ts")],
+      entry.env,
+      path.join(logDir, "refresh.log"),
+      4
+    ),
+    launchAgentsDir()
+  );
+
+  console.log("launchd agents:");
+  for (const agent of [serverAgent, refreshAgent]) {
+    console.log(`  ${agent.label} — ${agent.action}: ${agent.detail}`);
+  }
+  console.log("");
+  console.log(`  HTTP daemon:  http://127.0.0.1:3000/mcp`);
+  console.log(`  auth token:   ${path.join(logDir, "auth-token")} (mode 0600)`);
+  console.log(`  logs:         ${logDir}/server.log, ${logDir}/refresh.log`);
+  console.log("");
+
   console.log(
     "Restart Claude Desktop and start a new Claude Code session for the change to take effect."
   );
@@ -362,4 +413,203 @@ if (isDirectRun) {
     console.error(`install-local failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
+}
+
+// ---------------------------------------------------------------------------
+// launchd agents
+//
+// Two agents, following the convention already on this machine in
+// com.adarsh.becominggod.dailypush.plist: absolute paths everywhere (launchd
+// inherits no shell environment) and stdout/stderr to a log file.
+//
+//   com.adarsh.cp-mcp.server   — the loopback HTTP server, KeepAlive, for any
+//                                local client that speaks Streamable HTTP.
+//   com.adarsh.cp-mcp.refresh  — nightly cache warm at 04:00.
+//
+// The HTTP daemon is deliberately NOT registered as a second Claude Code
+// server. Claude Code and Claude Desktop reach cp-mcp over stdio; adding the
+// same 17 tools again over HTTP would just duplicate every tool in the
+// client's list. The daemon exists for everything else local — other MCP
+// clients, curl, scripts.
+// ---------------------------------------------------------------------------
+
+export function launchAgentsDir(): string {
+  return path.join(os.homedir(), "Library", "LaunchAgents");
+}
+
+export function cpMcpHome(): string {
+  return path.join(os.homedir(), ".cp-mcp");
+}
+
+/**
+ * Read the daemon's auth token, generating and persisting one on first run.
+ * Persisted (0600) rather than regenerated, so re-running the installer does
+ * not silently invalidate a token the user has already configured elsewhere.
+ */
+export function ensureAuthToken(tokenPath: string): string {
+  if (fs.existsSync(tokenPath)) {
+    const existing = fs.readFileSync(tokenPath, "utf8").trim();
+    if (existing.length > 0) return existing;
+  }
+  const token = randomBytes(24).toString("hex");
+  fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
+  fs.writeFileSync(tokenPath, token + "\n", { encoding: "utf8", mode: 0o600 });
+  return token;
+}
+
+function plistEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function plistDict(entries: Record<string, string>): string {
+  return Object.entries(entries)
+    .map(([k, v]) => `      <key>${plistEscape(k)}</key>\n      <string>${plistEscape(v)}</string>`)
+    .join("\n");
+}
+
+function plistArgs(args: string[]): string {
+  return args.map((a) => `      <string>${plistEscape(a)}</string>`).join("\n");
+}
+
+export function buildServerPlist(
+  label: string,
+  args: string[],
+  env: Record<string, string>,
+  logPath: string
+): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${plistEscape(label)}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+${plistArgs(args)}
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+${plistDict(env)}
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>${plistEscape(logPath)}</string>
+
+    <key>StandardErrorPath</key>
+    <string>${plistEscape(logPath)}</string>
+</dict>
+</plist>
+`;
+}
+
+export function buildRefreshPlist(
+  label: string,
+  args: string[],
+  env: Record<string, string>,
+  logPath: string,
+  hour: number
+): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${plistEscape(label)}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+${plistArgs(args)}
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+${plistDict(env)}
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Hour</key>
+      <integer>${String(hour)}</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>${plistEscape(logPath)}</string>
+
+    <key>StandardErrorPath</key>
+    <string>${plistEscape(logPath)}</string>
+</dict>
+</plist>
+`;
+}
+
+export interface AgentResult {
+  label: string;
+  action: "installed" | "unchanged" | "failed";
+  detail: string;
+}
+
+/**
+ * Write the plist and (re)load it. Idempotent: identical content is left
+ * alone, so re-running does not bounce a healthy daemon.
+ */
+export function installLaunchAgent(
+  label: string,
+  plist: string,
+  agentsDir: string,
+  // KeepAlive agents need an explicit kickstart: `bootstrap` loads the job but
+  // does not reliably start it, which left the daemon "not running / never
+  // exited" with an empty log. Calendar-interval agents must NOT be kickstarted
+  // — that would run the nightly refresh immediately, at install time.
+  start = false,
+  runner: CommandRunner = defaultRunner
+): AgentResult {
+  const target = path.join(agentsDir, `${label}.plist`);
+  const uid = String(process.getuid ? process.getuid() : 0);
+
+  if (fs.existsSync(target) && fs.readFileSync(target, "utf8") === plist) {
+    return { label, action: "unchanged", detail: `${target} (already current)` };
+  }
+
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.writeFileSync(target, plist, "utf8");
+
+  // bootout first so a changed plist is actually re-read; it fails harmlessly
+  // when the agent was never loaded, which is why its status is ignored.
+  runner("/bin/launchctl", ["bootout", `gui/${uid}/${label}`]);
+  const res = runner("/bin/launchctl", ["bootstrap", `gui/${uid}`, target]);
+  if (res.status !== 0) {
+    return {
+      label,
+      action: "failed",
+      detail: `wrote ${target} but launchctl bootstrap failed: ${res.stderr.trim() || res.stdout.trim()}`,
+    };
+  }
+  if (start) {
+    const kick = runner("/bin/launchctl", ["kickstart", "-k", `gui/${uid}/${label}`]);
+    if (kick.status !== 0) {
+      return {
+        label,
+        action: "failed",
+        detail: `bootstrapped ${target} but kickstart failed: ${kick.stderr.trim() || kick.stdout.trim()}`,
+      };
+    }
+  }
+
+  return { label, action: "installed", detail: target };
 }

@@ -11,6 +11,10 @@ import {
   registerWithClaudeCode,
   readUserScopedEntry,
   type McpServerEntry,
+  ensureAuthToken,
+  installLaunchAgent,
+  buildServerPlist,
+  buildRefreshPlist,
   type CommandRunner,
   type RunResult,
 } from "../scripts/install-local.js";
@@ -194,5 +198,90 @@ describe("install-local Claude Code registration", () => {
     expect(claudeCodeEntryCurrent({ command: "/other", args: ENTRY.args }, ENTRY)).toBe(false);
     expect(claudeCodeEntryCurrent({ command: ENTRY.command, args: [] }, ENTRY)).toBe(false);
     expect(claudeCodeEntryCurrent(undefined, ENTRY)).toBe(false);
+  });
+});
+
+describe("install-local launchd agents", () => {
+  function tmpDir(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "cp-mcp-agents-test-"));
+  }
+
+  it("the auth token is generated once and then reused", () => {
+    const tokenPath = path.join(tmpDir(), "auth-token");
+
+    const first = ensureAuthToken(tokenPath);
+    expect(first).toMatch(/^[0-9a-f]{48}$/);
+
+    // Re-running the installer must not invalidate a token already in use.
+    expect(ensureAuthToken(tokenPath)).toBe(first);
+    expect(fs.statSync(tokenPath).mode & 0o777).toBe(0o600);
+  });
+
+  it("the server plist pins loopback and carries the token", () => {
+    const plist = buildServerPlist(
+      "com.test.server",
+      ["/bin/node", "/repo/dist/http.js"],
+      { PORT: "3000", CP_MCP_HTTP_HOST: "127.0.0.1", CP_MCP_AUTH_TOKEN: "abc" },
+      "/logs/server.log"
+    );
+    expect(plist).toContain("<string>com.test.server</string>");
+    expect(plist).toContain("<key>CP_MCP_HTTP_HOST</key>\n      <string>127.0.0.1</string>");
+    expect(plist).toContain("<key>KeepAlive</key>");
+    expect(plist).not.toContain("0.0.0.0");
+  });
+
+  it("the refresh plist runs on a calendar interval, not KeepAlive", () => {
+    const plist = buildRefreshPlist("com.test.refresh", ["/bin/node", "x.ts"], {}, "/l.log", 4);
+    expect(plist).toContain("<key>StartCalendarInterval</key>");
+    expect(plist).toContain("<integer>4</integer>");
+    expect(plist).not.toContain("<key>KeepAlive</key>");
+  });
+
+  it("installing writes the plist and bootstraps it", () => {
+    const dir = tmpDir();
+    const { runner, calls } = recordingRunner();
+
+    const res = installLaunchAgent("com.test.a", "<plist/>", dir, false, runner);
+
+    expect(res.action).toBe("installed");
+    expect(fs.readFileSync(path.join(dir, "com.test.a.plist"), "utf8")).toBe("<plist/>");
+    // bootout first, so a changed plist is actually re-read rather than the
+    // stale one staying loaded.
+    expect(calls[0].args[0]).toBe("bootout");
+    expect(calls[1].args[0]).toBe("bootstrap");
+    // No kickstart when start=false: kickstarting the nightly refresh agent
+    // would run it immediately, at install time.
+    expect(calls.map((c) => c.args[0])).not.toContain("kickstart");
+  });
+
+  it("a KeepAlive agent is kickstarted, because bootstrap alone does not start it", () => {
+    const dir = tmpDir();
+    const { runner, calls } = recordingRunner();
+
+    const res = installLaunchAgent("com.test.d", "<plist/>", dir, true, runner);
+
+    expect(res.action).toBe("installed");
+    expect(calls.map((c) => c.args[0])).toEqual(["bootout", "bootstrap", "kickstart"]);
+  });
+
+  it("an unchanged plist is left alone rather than bouncing a healthy daemon", () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, "com.test.b.plist"), "<plist/>", "utf8");
+    const { runner, calls } = recordingRunner();
+
+    const res = installLaunchAgent("com.test.b", "<plist/>", dir, false, runner);
+
+    expect(res.action).toBe("unchanged");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a failing bootstrap reports failed rather than claiming success", () => {
+    const dir = tmpDir();
+    const { runner } = recordingRunner({ status: 5, stdout: "", stderr: "nope" });
+
+    const res = installLaunchAgent("com.test.c", "<plist/>", dir, false, runner);
+
+    expect(res.action).toBe("failed");
+    expect(res.detail).toContain("nope");
   });
 });
