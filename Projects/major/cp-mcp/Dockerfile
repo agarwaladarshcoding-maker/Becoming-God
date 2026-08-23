@@ -1,5 +1,7 @@
-# Use a Node base image that supports better-sqlite3 build if needed
-FROM node:20-slim
+# better-sqlite3 13 requires Node >= 22: its Linux prebuilds are built against
+# the Node 22 ABI. On Node 20 the module still loads, but it segfaults the
+# moment `new Database()` touches the file — hence Node 22 here, not 20.
+FROM node:22-slim
 
 # Install python and build tools for native addons (better-sqlite3)
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
@@ -17,6 +19,9 @@ COPY . .
 
 # Build TypeScript
 RUN npm run build
+
+# Drop devDependencies (typescript, vitest, eslint, prettier) from the runtime image
+RUN npm prune --omit=dev
 
 # Setup data directory for SQLite
 RUN mkdir -p /data

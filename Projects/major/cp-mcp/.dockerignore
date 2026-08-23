@@ -1,0 +1,14 @@
+node_modules
+dist
+cache.db*
+.git
+.github
+test
+docs
+.claude
+.mcp.json
+.DS_Store
+*.log
+*.md
+!README.md
+!LICENSE
