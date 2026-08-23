@@ -29,7 +29,7 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
 - CF rate limit: 1 req/2s, and failures come as HTTP 200 with `status: "FAILED"` in the body
 - AtCoder Problems API is unofficial/volunteer-run — must be extra polite (>1s spacing, ETags, descriptive UA)
 - AtCoder difficulties are IRT estimates mapped to CF scale — always labeled "estimated"
-- Verification must be 100% accurate — there's a mandatory 50-problem manual audit at M4
+- Verification must be 100% accurate — the mandatory 50-problem M4 audit ran 2026-08-23: Codeforces 53/53, AtCoder blocked by a login wall
 
 ## Build Plan (7 Milestones)
 - **M0**: Scaffold (npm, TS, ping tool) — ~90 min
@@ -84,6 +84,10 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
   locally but **not deployed** — no Fly/tunnel, so Claude Web and Notion cannot reach it yet.
 - **`cp_upcoming_contests_*` (T7) are now implemented and registered.** `cp_contest_performance_*` (T8)
   remains unimplemented — out of scope for now.
-- **The M4 50-problem manual audit has never been run.** `cp_verify_solved_*` work on spot checks but are
-  not yet audited against the live site UIs; `audit_results.md` has 40 unticked rows, not 50. This remains
-  the outstanding gate before "machine-verified" is a proven claim rather than a plausible one.
+- **The M4 manual audit was run on 2026-08-23 and the Codeforces half passed 53/53.** Every row was checked
+  against `codeforces.com/submissions/AdarshAg/contest/<id>` — the site UI, a different code path from the
+  `api/user.status` the tool reads — and status, attempt count and first-AC timestamp agreed on all 53,
+  including live-contest submissions judged on pretests. "Machine-verified" is now a proven claim for
+  Codeforces. **The AtCoder half is still open:** every AtCoder page showing per-user submissions requires a
+  signed-in account, so the shared verification *logic* is audited but the kenkoooo mirror it reads is
+  trusted, not verified. Closing that needs a human with an AtCoder login. See `audit_results.md`.
