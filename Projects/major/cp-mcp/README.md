@@ -59,46 +59,82 @@ Set `CP_MCP_CF_HANDLE` and/or `CP_MCP_AC_HANDLE` in the client's `env` block (se
 
 ## Client Configuration
 
-### Claude Code
+### One command
 
-This repo ships a `.mcp.json` in its root, so Claude Code picks up the `cp-mcp` server automatically for any session opened in this project — no manual configuration needed. Open `.mcp.json` and fill in `CP_MCP_CF_HANDLE` / `CP_MCP_AC_HANDLE` with your handles (they ship blank).
+```bash
+npm run install:local
+```
 
-### Claude Desktop
+That wires cp-mcp into Claude Code (**every directory**, not just this repo) and Claude Desktop, and installs
+two launchd agents. It is idempotent — re-run it after `git pull` and it reports "unchanged" where nothing moved.
 
-Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`, filling in your handles, then **fully quit and restart Claude Desktop** (closing the window is not enough — it keeps the old config in memory until the process restarts):
+The two clients are wired by different routes on purpose:
+
+- **Claude Code** — via `claude mcp add --scope user`. `~/.claude.json` is rewritten continuously by running
+  Claude Code sessions, so hand-merging it would be last-writer-wins against its owner. The installer only ever
+  *reads* that file, to decide whether a write is needed. If the `claude` binary isn't on `PATH`, the step is
+  skipped and the exact command is printed — never a fallback hand-edit of a live config.
+- **Claude Desktop** — hand-merged, because there is no CLI for it. Backed up first, only `mcpServers["cp-mcp"]`
+  touched, and aborted untouched if the file doesn't parse: it carries a `preferences` blob of real app state
+  whose loss would not be obvious.
+
+Absolute paths are used for both `command` and `args`, because GUI-launched Claude Desktop does not inherit your
+shell `PATH` and a bare `node` is a common silent-failure mode. **Restart Claude Desktop fully** (closing the
+window is not enough) and start a new Claude Code session.
+
+### Doing it by hand
+
+If you'd rather not run the installer, the entry is an ordinary stdio server:
 
 ```json
 {
   "mcpServers": {
     "cp-mcp": {
       "command": "/opt/homebrew/bin/node",
-      "args": ["/Users/adarshagarwala/Documents/Becoming-God/Projects/major/cp-mcp/dist/bin/stdio.js"],
-      "env": { "CP_MCP_CF_HANDLE": "", "CP_MCP_AC_HANDLE": "" }
+      "args": ["/absolute/path/to/cp-mcp/dist/bin/stdio.js"],
+      "env": { "CP_MCP_CF_HANDLE": "your-handle" }
     }
   }
 }
 ```
 
-Use the absolute path to `node` (`/opt/homebrew/bin/node` on this machine, check yours with `which node`) rather than a bare `node` — Claude Desktop's spawn environment does not reliably include Homebrew's `bin` on `PATH`, and a bare `node` command is a common silent-failure mode.
+`~/.gemini/settings.json` uses the same `mcpServers` shape. Cursor's MCP settings (Settings → Features → MCP)
+accept the same command/args/env fields.
 
-### Gemini CLI / Cursor
+## Background agents
 
-`~/.gemini/settings.json` uses the same `mcpServers` shape as above — add the same block under its own `mcpServers` key. Cursor's MCP settings (Settings → Features → MCP) accept the same command/args/env fields via its UI or `mcp.json`.
+`npm run install:local` also installs two launchd agents:
 
-## Remote / HTTP
+| Label | What it does |
+| --- | --- |
+| `com.adarsh.cp-mcp.server` | Runs the HTTP server on `127.0.0.1:3000`, `KeepAlive`. |
+| `com.adarsh.cp-mcp.refresh` | Warms the catalogues and your submission history at 04:00. |
 
-`npm run serve` starts a Streamable HTTP server (`POST /mcp`) with a `/health` endpoint, built on `@hono/node-server`. Only this Streamable HTTP transport exists; there is no other web-facing transport or tunnel setup to configure.
+The refresh exists because Codeforces allows one request per 2100ms, so a cold submission backfill costs real
+wall-clock time. Paying it overnight beats paying it the moment you ask "did I solve this?".
 
-**Status: ready, blocked on billing — not deployed.** The container builds, runs, and serves `/health` returning `ok:true`; the auth gate below has been probed live against the built server. What is missing is a hosted instance: creating the Fly app failed with `Error: We need your payment information to continue!` — the Fly account has no card on file. Once one is added, deploy with:
+Logs are at `~/.cp-mcp/server.log` and `~/.cp-mcp/refresh.log`. To stop either:
 
 ```bash
-flyctl apps create cp-mcp --org personal
-flyctl volumes create cp_data --region iad --size 1 --app cp-mcp
-flyctl secrets set CP_MCP_AUTH_TOKEN="$(openssl rand -hex 24)" --app cp-mcp
-flyctl deploy --app cp-mcp
+launchctl bootout gui/$(id -u)/com.adarsh.cp-mcp.server
 ```
 
-`min_machines_running = 1` with `auto_stop_machines = false` keeps one machine plus the `cp_data` volume up permanently — expect roughly $2–5/month, not the near-zero cost of an autostopped app.
+Delete the matching plist in `~/Library/LaunchAgents/` to keep it from coming back.
+
+**The daemon is deliberately not registered as a second Claude Code server.** Claude Code and Claude Desktop
+reach cp-mcp over stdio; adding the same 17 tools again over HTTP would duplicate every tool in the client's
+list. The daemon is there for everything else local — other MCP clients, `curl`, scripts.
+
+## Local HTTP server
+
+`npm run serve` starts a Streamable HTTP server (`POST /mcp`) with a `/health` endpoint, built on
+`@hono/node-server`. Under `install:local` this is what the `com.adarsh.cp-mcp.server` agent runs.
+
+It binds **`127.0.0.1` only**. That default matters: the daemon carries `CP_MCP_CF_HANDLE`, and `resolveHandle`
+(`src/domain/config.ts`) falls back to it, so every caller who omits a handle silently gets yours. An
+all-interfaces bind would hand a handle-scoped server to anyone on the same cafe wifi or campus LAN. Set
+`CP_MCP_HTTP_HOST=0.0.0.0` to opt out deliberately — and if you do, read the warning at the end of the auth
+section first.
 
 ### Auth
 
@@ -107,10 +143,48 @@ Set `CP_MCP_AUTH_TOKEN` and the endpoint gates every request to `/mcp`; unset, b
 - **Secret path** — `POST https://<host>/mcp/<token>`. This is the form claude.ai's custom-connector UI needs: it accepts a URL plus optional OAuth client ID/secret and has no field for a custom header, so a header-only gate would lock out the very client this deploy targets.
 - **Bearer header** — `Authorization: Bearer <token>` on `POST /mcp`, for clients that can send headers (Claude Code, Cursor).
 
-`/health` stays open so Fly's health checks and manual probing don't need the secret. The trade-off with the secret-path form is deliberate: a capability URL can appear in proxy logs. That's acceptable here because the server is read-only over public competitive-programming data — a leak costs rate budget, not privacy.
+`/health` stays open so health checks and manual probing don't need the secret. The trade-off with the secret-path form is deliberate: a capability URL can appear in proxy logs. That's acceptable here because the server is read-only over public competitive-programming data — a leak costs rate budget, not privacy.
 
-**Do not set `CP_MCP_CF_HANDLE` (or `CP_MCP_AC_HANDLE`) on a shared deployment.** `resolveHandle` (`src/domain/config.ts`) falls back to these env vars, so setting either on Fly would make every anonymous remote caller silently default to the owner's handle. Left unset, the handle-taking tools throw an actionable error and remote callers must pass `handle` explicitly — which is the correct behaviour for a server other people can call.
+**Setting `CP_MCP_CF_HANDLE` is correct on a loopback daemon and wrong on a shared one.** `resolveHandle` (`src/domain/config.ts`) falls back to these env vars. On your own laptop, bound to `127.0.0.1`, that is exactly what you want — you shouldn't retype your own handle on your own machine. On anything other people can reach, it would make every anonymous caller silently default to your handle. If you ever set `CP_MCP_HTTP_HOST` to something other than loopback, unset the handle vars in the same breath.
 
 ## Cache
 
-The SQLite cache defaults to `~/.cp-mcp/cache.db`, created automatically on first run regardless of the process's working directory. Set `CP_MCP_DB_PATH` to override the location (e.g. for tests, which use `:memory:`).
+The SQLite cache lives at `~/.cp-mcp/cache.db`, created automatically on first run regardless of the process's
+working directory. Set `CP_MCP_DB_PATH` to override it (tests use `:memory:`).
+
+### Back it up
+
+```bash
+npm run backup
+```
+
+The problem catalogues re-download in minutes. Your submission history — the thing behind "machine-verified
+solve status" — does not. This uses SQLite's online backup API rather than copying the file, so the snapshot is
+consistent even while the daemon is writing; a plain `cp` would miss whatever is still in the WAL. It then
+checkpoints with `TRUNCATE` and keeps the last 7 backups in `~/.cp-mcp/backups/`.
+
+**Never delete `cache.db-wal` by hand.** An uncheckpointed WAL holds committed transactions that are not yet in
+the main file; removing it discards them. That is how 773 real submissions were lost once already.
+
+### Several clients at once
+
+Claude Code, Claude Desktop and the daemon are three processes sharing one database. Concurrent reads and writes
+are fine (WAL mode, 5s busy timeout), but the Codeforces throttle is per-process, so three of them would
+collectively exceed the 1-request-per-2-seconds limit — and Codeforces signals over-quota with **HTTP 200 and
+`status: "FAILED"` in the body**, which would degrade silently into a short sync and a false "untouched" verdict.
+
+A `sync_lock` lease (`src/cache/lock.ts`) prevents that: only the lease holder fetches for a given handle, and
+everyone else returns cached data immediately rather than queueing. A crashed holder's lease expires and is
+reclaimed, so nothing wedges.
+
+## Hosting it remotely (optional, not required)
+
+Everything above runs on your laptop and needs no server. `Dockerfile`, `.dockerignore` and `fly.toml` remain in
+the repo for anyone who wants a hosted instance, and the image is known to build and serve `/health`. Nothing in
+the local setup depends on them.
+
+The cost of staying local is honest and worth stating: **Claude Web and Notion cannot reach a loopback address**,
+so neither can use this. Claude Code (every directory), Claude Desktop and any other local client can.
+
+If you do host it: generate a token, set it as a secret rather than in committed config, and **do not set
+`CP_MCP_CF_HANDLE`** on the host, for the reason in the auth section above.

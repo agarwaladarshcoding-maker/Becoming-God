@@ -63,7 +63,7 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
 
 ## Current State
 - **All planning docs (00-10) are written and complete**
-- **The server works over stdio** — 17 tools (16 CP tools + `ping`) implemented, 50/50 tests pass across 9 files, `npx tsc --noEmit` clean
+- **The server works over stdio** — 17 tools (16 CP tools + `ping`) implemented, 84/84 tests pass across 13 files, `npx tsc --noEmit` clean
 - As of 2026-08-23, four defects that broke it in practice were found and fixed: the cache DB path was
   relative and failed under Claude Desktop's `cwd=/`; AtCoder difficulty was read from a JSON file that has
   no `difficulty` field (all 9,395 rows were `NULL`); AtCoder problem URLs pointed at the wrong contest for
@@ -92,12 +92,20 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
   endpoint can now be gated with `CP_MCP_AUTH_TOKEN`, accepted as either a secret path segment
   (`/mcp/<token>`) or a `Bearer` header — the path form exists because claude.ai's custom-connector UI has
   no field for a custom header. See `docs/progress.md`'s third 2026-08-23 entry for the full list.
-- Wired into Claude Code via `.mcp.json` in this repo. Remote (Streamable HTTP) is built, containerized, and
-  auth-gated — all verified locally, including a live probe of the auth gate against the built server — but
-  **still not deployed**. Creating the Fly app failed with `Error: We need your payment information to
-  continue!` (no card on the Fly account). This is ready-and-blocked-on-billing, not "not started": the
-  README documents the exact `flyctl` command sequence to run once that's resolved. Claude Web and Notion
-  cannot reach the server yet.
+- **Installed locally, as of 2026-08-23.** `npm run install:local` wires Claude Code at **user scope** (so the
+  tools resolve in every directory, including the ICPC folder where problems are actually solved — not just
+  this repo) and Claude Desktop, and installs two launchd agents: a KeepAlive HTTP daemon on `127.0.0.1:3000`
+  and a 04:00 cache warm. Verified end to end from `Becoming-God/ICPC/Day 13`: `cp_verify_solved_codeforces`
+  answers with **no handle argument**.
+- **Hosting was cancelled, not blocked.** Paying for a server made no sense for a single-user tool on one
+  laptop. `Dockerfile` and `fly.toml` remain as an optional path; nothing depends on them. The honest cost:
+  Claude Web and Notion cannot reach a loopback address, so both are given up. That is stated in the README
+  rather than left implicit.
+- Two defects that only bite once several local processes exist were fixed first: the HTTP server bound
+  `0.0.0.0` (a daemon carrying a default handle would have answered strangers on any network), and the
+  Codeforces throttle is per-process, so three clients would collectively have exceeded the 1-req/2s limit —
+  which Codeforces reports as HTTP 200 with `status: "FAILED"`, degrading silently into a false
+  `✗ untouched`. A `sync_lock` lease now serialises upstream fetching across processes.
 - **`cp_upcoming_contests_*` (T7) are now implemented and registered.** `cp_contest_performance_*` (T8)
   remains unimplemented — out of scope for now.
 - **The M4 manual audit was run on 2026-08-23 and the Codeforces half passed 53/53.** Every row was checked

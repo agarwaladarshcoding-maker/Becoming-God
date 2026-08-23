@@ -78,9 +78,19 @@ Milestones track against `docs/05-BUILD-PLAN.md`. Each task uses `[x]` (done) or
 - [ ] ~~Update `README.md` with TryCloudflare / localtunnel instructions for Claude Web / Notion~~ — tunnel/SSE approach abandoned, not pending
 - [x] `.dockerignore` added, `npm prune --omit=dev` in `Dockerfile`, base image bumped to `node:22-slim` — image builds and the container serves `/health` returning `ok:true`
 - [x] `CP_MCP_AUTH_TOKEN` gate on `src/http.ts` — secret path (`/mcp/<token>`) or `Authorization: Bearer <token>`, probed live against the built server
-- [ ] **Deploy to Fly** — blocked: `flyctl apps create` fails with `Error: We need your payment information to continue!` (no card on the Fly account). Everything the deploy depends on is verified; nothing is hosted.
+- [x] **Installed locally** — `npm run install:local` wires Claude Code (user scope, every directory) and Claude Desktop, plus a loopback HTTP daemon and a nightly refresh under launchd.
+- [ ] ~~Deploy to Fly~~ — **cancelled, not blocked.** Hosting was dropped as a goal: it costs money for a
+  single-user tool on one laptop. `Dockerfile` and `fly.toml` stay in the repo as an optional path; nothing
+  depends on them.
 
-**Gate:** Notion/Claude Web connects successfully to the public tunnel URL. — **Still not met**, but for a different reason than before. The SSE server this referred to has been deleted, and the Streamable HTTP server that replaced it (`src/http.ts`) now has a real listener, a working container, and an auth gate — all verified locally and via `docker run`. What remains is purely external: the Fly app cannot be created without billing information on the account. **Not deployed. Ready, blocked on Fly billing, not a passed gate.**
+**Gate (revised):** the tools resolve wherever the work happens, without a handle argument. — **Met.**
+Verified from `~/Documents/Becoming-God/ICPC/Day 13`: `cp_verify_solved_codeforces` with no `handle` returned
+`2158C ✓ solved`, `1A ✓ solved`, `2151C ✗ untouched`. The daemon binds `127.0.0.1:3000`, `/health` answers
+without credentials, and `/mcp` is 401 without the token and 200 with it.
+
+The original gate ("Notion/Claude Web connects to a public tunnel URL") is **retired, not failed**. Both were
+given up deliberately when hosting was dropped — neither can reach a loopback address. That cost is stated
+plainly in the README rather than left implicit.
 
 ---
 
@@ -226,18 +236,14 @@ for a deploy.
   only via the secret path `/mcp/<token>` or `Authorization: Bearer <token>` on `/mcp` — both routes share
   one handler so they can't drift — compared with `timingSafeEqual` so the token can't be recovered a byte
   at a time, checked before the rate-limit counter increments so unauthenticated probes can't exhaust a real
-  caller's quota. `/health` stays open for Fly's checks. The secret-path form exists specifically because
+  caller's quota. `/health` stays open for health checks. The secret-path form exists specifically because
   claude.ai's custom-connector UI takes a URL plus optional OAuth credentials and has no field for a custom
   header — a header-only gate would lock out the very client this deploy targets. That's a deliberate
   trade-off: a capability URL can leak into proxy logs, acceptable here because the server is read-only over
   public data, so a leak costs rate budget, not privacy. New tests in `test/http_auth.test.ts` covering
   both credential forms and the unset/wrong-token cases.
-- **Still not deployed.** Everything the deploy depends on — image, auth gate, `fly.toml`, `CP_MCP_DB_PATH`
-  handling — is built and verified. Creating the Fly app itself failed:
-  `Error: We need your payment information to continue!` — no card on file on the Fly account. The exact
-  command sequence to run once that's resolved is in the README's Remote / HTTP section. Also documented
-  there: `CP_MCP_CF_HANDLE` must never be set on the eventual Fly deployment, since `resolveHandle` falls
-  back to it and would make every anonymous caller default to the owner's handle.
+- **Not deployed, and no longer trying to be.** See the 2026-08-23 (fourth pass) entry below: hosting was
+  cancelled in favour of a local install.
 - **Test count 41 → 50, across 9 files** (was 8).
 
 Tool count is unchanged at 17; none of this pass added or removed a tool.
@@ -253,6 +259,54 @@ Tool count is unchanged at 17; none of this pass added or removed a tool.
 | M2 Cache + CF search | ✓ Done |
 | M3 AtCoder + unified model | ✓ Done — AtCoder difficulty fixed 2026-08-23 (was NULL, now populated); upcoming-contests tools (T7) registered 2026-08-23 |
 | M4 Verification + submissions | Tools done; `unknown` status added 2026-08-23 so absent history can't read as "not solved"; **manual audit run 2026-08-23 — Codeforces 53/53 against the site UI; AtCoder blocked by login wall** |
-| M5 Remote transport | Local stdio entrypoint fixed 2026-08-23; container image and auth gate built and verified 2026-08-23; **deploy ready, blocked on Fly billing** — not deployed, remote clients not connected |
+| M5 Local install | stdio entrypoint fixed 2026-08-23; HTTP server, auth gate and container verified; **installed locally 2026-08-23** — Claude Code (user scope, all directories), Claude Desktop, loopback daemon + nightly refresh under launchd. Hosting cancelled by choice, so Claude Web and Notion are out of reach by design |
 | M6 Analytics + publish | Resources fixed 2026-08-23 and now working; **not published to npm/MCP registry** |
 | M7 Hardening | ✓ Done |
+
+---
+
+## 2026-08-23 — fourth pass: make it run locally, and retire hosting
+
+Hosting was cancelled — it costs money for a single-user tool that only ever runs on one laptop. But "just run
+it locally" turned out to be the wrong description of the work, because **cp-mcp was not installed anywhere
+useful.** Measured before starting:
+
+- `~/.claude.json` had **no `mcpServers` at any scope** — not top-level, not in any of its 12 project entries.
+- `claude_desktop_config.json` had **no `mcpServers` key at all**. Claude Desktop had never seen this server.
+- The only wiring was `.mcp.json`, which Claude Code scopes to this repo alone.
+
+So the tools resolved only inside a Claude Code session opened in the cp-mcp source folder — not in Claude
+Desktop, and not in `Becoming-God/ICPC/Day 13/` where the problems are actually solved. The founding goal
+could not happen where the work happens. Fly was never what stood in the way; installation was.
+
+**What landed**
+
+- `src/http.ts` binds **`127.0.0.1`** by default (`CP_MCP_HTTP_HOST` to opt out). It passed no `hostname`, so
+  Node bound `0.0.0.0` — harmless behind Fly's proxy, not harmless for a laptop daemon carrying a default
+  handle, which anyone on the same network could then use.
+- **`sync_lock` lease** (`src/cache/lock.ts`). The Codeforces throttle is a module-level `PQueue` map — correct
+  per process, and this pass creates three. Three queues at 1 req/2.1s exceed the 1-req/2s limit, and
+  Codeforces reports over-quota as HTTP 200 with `status: "FAILED"`, so it would have degraded silently into a
+  short sync and a false `✗ untouched`. Also closed a leak next door: the cold-sync path had no `try/finally`,
+  so a throw wedged a handle into "sync in progress" for the process lifetime with no sync running.
+- **`npm run install:local`** wires both clients, by deliberately different routes. `~/.claude.json` is
+  rewritten continuously by live Claude Code sessions, so it goes through `claude mcp add --scope user` and is
+  only ever read; Claude Desktop's config is hand-merged (backup first, one key, abort untouched if it does not
+  parse) because it holds a `preferences` blob of real app state and has no CLI.
+- **Two launchd agents** — a KeepAlive loopback daemon and a 04:00 cache warm. `bootstrap` turned out to load a
+  KeepAlive job *without starting it*; an explicit `kickstart -k` was needed. Calendar-interval agents must not
+  be kickstarted or the nightly refresh fires at install time.
+- **`npm run backup`** — SQLite online backup (consistent while the daemon writes, unlike `cp`), then
+  `wal_checkpoint(TRUNCATE)`, keeping 7. The WAL was 11 MB and had never been checkpointed.
+- Removed `.mcp.json`: user scope now covers this repo too, and keeping it left two `cp-mcp` registrations
+  pointing at different node binaries, which Claude Code flags as an endpoint conflict.
+- The stale repo-root `cache.db` (14 MB, pre-dating the `~/.cp-mcp` move) was **moved**, not deleted, to
+  `~/.cp-mcp/backups/legacy-repo-root-cache.db`. It holds 31,003 submissions across borrowed handles and
+  **zero for AdarshAg** — worth noting that its `jiangly` row sits at exactly 10,000, a fossil of the old
+  submission cap.
+
+**Test count 50 → 84, across 13 files** (was 9).
+
+**Deliberately not done:** the AtCoder half of the M4 audit (still behind AtCoder's sign-in wall),
+`cp_contest_performance_*` (T8), and the "what should I solve next" tool — the highest-value remaining item,
+but a design problem rather than a defect.
