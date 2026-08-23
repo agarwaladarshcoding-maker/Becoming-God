@@ -79,8 +79,14 @@ The two clients are wired by different routes on purpose:
   whose loss would not be obvious.
 
 Absolute paths are used for both `command` and `args`, because GUI-launched Claude Desktop does not inherit your
-shell `PATH` and a bare `node` is a common silent-failure mode. **Restart Claude Desktop fully** (closing the
-window is not enough) and start a new Claude Code session.
+shell `PATH` and a bare `node` is a common silent-failure mode.
+
+> **Quit Claude Desktop before running this.** Not just closing the window — Cmd-Q. Claude Desktop persists its
+> config from memory while running, and was observed here rewriting `claude_desktop_config.json` between two
+> installer runs, silently dropping the `mcpServers` entry that had just been added. The installer warns when it
+> detects the app running; heed it, or the install will appear to succeed and quietly not stick.
+
+Afterwards, start a new Claude Code session so it picks up the user-scope registration.
 
 ### Doing it by hand
 

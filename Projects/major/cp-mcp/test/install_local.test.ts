@@ -12,6 +12,7 @@ import {
   readUserScopedEntry,
   type McpServerEntry,
   ensureAuthToken,
+  isClaudeDesktopRunning,
   installLaunchAgent,
   buildServerPlist,
   buildRefreshPlist,
@@ -283,5 +284,25 @@ describe("install-local launchd agents", () => {
 
     expect(res.action).toBe("failed");
     expect(res.detail).toContain("nope");
+  });
+});
+
+describe("install-local Claude Desktop liveness check", () => {
+  // Claude Desktop persists its config from memory while running, and was
+  // observed here overwriting claude_desktop_config.json between two installer
+  // runs — silently dropping the mcpServers entry that had just been added.
+  // Unlike ~/.claude.json there is no CLI to delegate to, so the only defence
+  // is to notice and say so.
+  it("reports running when pgrep matches the app bundle", () => {
+    const { runner, calls } = recordingRunner({ status: 0, stdout: "96950\n", stderr: "" });
+    expect(isClaudeDesktopRunning(runner)).toBe(true);
+    // The bundle prefix is the pattern that actually matches: `pgrep -x Claude`
+    // finds nothing, and a deeper path does not match either.
+    expect(calls[0].args).toEqual(["-f", "/Applications/Claude.app"]);
+  });
+
+  it("reports not running on a non-zero pgrep exit", () => {
+    const { runner } = recordingRunner({ status: 1, stdout: "", stderr: "" });
+    expect(isClaudeDesktopRunning(runner)).toBe(false);
   });
 });

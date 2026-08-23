@@ -304,6 +304,26 @@ export function registerWithClaudeCode(
   return { action: "registered", detail: "registered at user scope (all directories)" };
 }
 
+/**
+ * True when Claude Desktop is running.
+ *
+ * This matters because Claude Desktop persists its own config from memory
+ * while it runs — observed doing exactly that here, rewriting
+ * claude_desktop_config.json between two installer runs and silently dropping
+ * the mcpServers key we had just added. It is the same last-writer-wins
+ * hazard we route around for ~/.claude.json, except Desktop has no CLI to
+ * delegate to, so the only safe answer is to install while it is not running.
+ *
+ * Matched on the app bundle prefix, not a process name and not a deeper path.
+ * `pgrep -x Claude` finds nothing (the main process is not named that), and
+ * `pgrep -f` would not match the fuller executable path either — the bundle
+ * prefix is what actually matches. It is specific enough: Claude Code's own
+ * bundle lives under ~/Library/Application Support, not /Applications.
+ */
+export function isClaudeDesktopRunning(runner: CommandRunner = defaultRunner): boolean {
+  return runner("/usr/bin/pgrep", ["-f", "/Applications/Claude.app"]).status === 0;
+}
+
 export function findClaudeBinary(runner: CommandRunner = defaultRunner): string | null {
   const res = runner("/usr/bin/which", ["claude"]);
   if (res.status !== 0) return null;
@@ -348,6 +368,12 @@ export function main(): void {
   const desktop = updateConfig(claudeDesktopConfigPath(), entry);
   console.log("Claude Desktop:");
   console.log(reportLine(desktop));
+  if (isClaudeDesktopRunning()) {
+    console.log("");
+    console.log("  !! Claude Desktop is RUNNING. It persists this config from memory and has been");
+    console.log("     observed overwriting it — silently undoing the line above. Fully quit Claude");
+    console.log("     Desktop (Cmd-Q, not just closing the window), then re-run this installer.");
+  }
   console.log("");
 
   // launchd — the loopback daemon and the nightly cache warm.
