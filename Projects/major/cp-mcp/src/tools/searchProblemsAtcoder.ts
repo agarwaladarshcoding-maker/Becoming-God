@@ -19,6 +19,12 @@ export const searchProblemsAtcoderSchema = z.object({
   min_solver_count: z.number().int().default(0),
   limit: z.number().int().min(1).max(25).default(10),
   seed: z.number().int().optional(),
+  include_unrated: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Include problems AtCoder Problems has no difficulty estimate for (shown as `?`). Excluded by default because they cannot be placed in a difficulty band."
+    ),
 });
 
 type SearchProblemsAtcoderArgs = z.infer<typeof searchProblemsAtcoderSchema>;
@@ -141,7 +147,7 @@ async function syncAcProblemCatalogue(): Promise<{ source: "cache" | "live"; ups
 }
 
 export async function handleSearchProblemsAtcoder(args: SearchProblemsAtcoderArgs) {
-  const { min_difficulty, max_difficulty, exclude_solved_by, min_solver_count, limit, seed } = args;
+  const { min_difficulty, max_difficulty, exclude_solved_by, min_solver_count, limit, seed, include_unrated } = args;
 
   if (min_difficulty > max_difficulty) {
     return {
@@ -177,37 +183,99 @@ export async function handleSearchProblemsAtcoder(args: SearchProblemsAtcoderArg
     for (const r of rows) excludeSolvedIds.add(r.problem_id);
   }
 
+  const toProblem = (r: DbProblemRow): Problem => ({
+    site: "atcoder",
+    id: r.id,
+    siteId: r.site_id,
+    name: r.name,
+    url: r.url,
+    contestId: r.contest_id ?? "",
+    difficulty: r.difficulty ?? undefined,
+    difficultySource: r.difficulty_source,
+    difficultyConfidence: r.difficulty_confidence ?? undefined,
+    tags: [],
+    solvedCount: r.solved_count ?? undefined,
+  });
+
   const dbRows = db.prepare(
     "SELECT * FROM problems WHERE site = 'atcoder' AND difficulty >= ? AND difficulty <= ?"
   ).all(min_difficulty, max_difficulty) as DbProblemRow[];
 
-  const problems: Problem[] = dbRows
+  const ratedProblems: Problem[] = dbRows
     .filter(r => !excludeSolvedIds.has(r.id))
     .filter(r => (r.solved_count ?? 0) >= min_solver_count)
-    .map(r => ({
-      site: "atcoder",
-      id: r.id,
-      siteId: r.site_id,
-      name: r.name,
-      url: r.url,
-      contestId: r.contest_id ?? "",
-      difficulty: r.difficulty ?? undefined,
-      difficultySource: r.difficulty_source,
-      difficultyConfidence: r.difficulty_confidence ?? undefined,
-      tags: [],
-      solvedCount: r.solved_count ?? undefined,
-    }));
+    .map(toProblem);
 
-  const filtered = filterProblems(problems, { tags: [], tagMode: "any" });
+  // `difficulty_source = 'unknown'` is the catalogue's existing marker for problems
+  // kenkoooo's IRT model has no estimate for (usually because everyone solves them —
+  // the model needs failures to fit). SQL `difficulty >= ? AND difficulty <= ?` never
+  // matches NULL, so these rows are silently absent from `ratedProblems` above; count
+  // them here — always, regardless of the flag — so the footer can say how many exist
+  // instead of pretending the band is complete.
+  const unratedAvailable = (
+    db.prepare(
+      "SELECT count(*) as count FROM problems WHERE site = 'atcoder' AND difficulty_source = 'unknown'"
+    ).get() as { count: number }
+  ).count;
+
+  let unratedProblems: Problem[] = [];
+  if (include_unrated) {
+    // Bound in SQL, not JS: pulling all ~4,600 unrated rows into objects on every call
+    // just to keep the top few hundred by solver count is wasted work. LIMIT 200 is
+    // comfortably more than any legal `limit` (max 25) times the reserved share below.
+    const unratedRows = db.prepare(
+      "SELECT * FROM problems WHERE site = 'atcoder' AND difficulty_source = 'unknown' ORDER BY solved_count DESC LIMIT 200"
+    ).all() as DbProblemRow[];
+    unratedProblems = unratedRows
+      .filter(r => !excludeSolvedIds.has(r.id))
+      .filter(r => (r.solved_count ?? 0) >= min_solver_count)
+      .map(toProblem);
+    // Already DESC from SQL; the exclude-solved/min-solver filters above preserve
+    // order, but re-sort defensively rather than depend on filter() not reshuffling.
+    unratedProblems.sort((a, b) => (b.solvedCount ?? 0) - (a.solvedCount ?? 0));
+  }
+
+  // An unrated problem has no difficulty, so rankProblems' `?? 0` fallback would sort
+  // it by distance-from-center like a real match — meaningless, and for a low band it
+  // can even beat genuine matches. Rank the two groups separately instead: rated rows
+  // keep their existing proximity ranking (and are the only ones shuffled), unrated
+  // rows are ordered by solver count so the likes of dp_a "Frog 1" surface first among
+  // them.
+  //
+  // Pure rated-then-unrated concatenation would make unrated rows unreachable at any
+  // legal `limit` (max 25) once a band's rated pool exceeds it — the 800-1000 band
+  // alone has 1,603 rated rows, so `include_unrated` would never visibly change the
+  // output. Instead, reserve a guaranteed minority share (~20%, at least 1 row) for
+  // unrated results whenever the caller explicitly asked for them and some exist.
+  // Unrated rows still never outrank a genuine match — they only ever occupy the
+  // reserved tail — but the flag now actually does something.
+  const filtered = filterProblems(ratedProblems, { tags: [], tagMode: "any" });
   const ranked = rankProblems(filtered, min_difficulty, max_difficulty);
   const shuffled = seededShuffle(ranked, seed ?? Math.floor(Date.now() / 86400000));
-  const page = shuffled.slice(0, limit);
+
+  const unratedSlots =
+    unratedProblems.length === 0 ? 0 : Math.min(unratedProblems.length, Math.max(1, Math.floor(limit / 5)));
+  const ratedSlice = shuffled.slice(0, limit - unratedSlots);
+  // If the rated group came up short, let unrated fill the remainder up to `limit`
+  // so a sparse or empty band still returns a full page.
+  const unratedSlice = unratedProblems.slice(0, limit - ratedSlice.length);
+  const page = [...ratedSlice, ...unratedSlice];
+  const unratedShown = unratedSlice.length;
+
+  let footerNote = "";
+  if (include_unrated) {
+    if (unratedAvailable > 0) {
+      footerNote = `\nshowing ${unratedShown} of ${unratedAvailable} problems with no difficulty estimate (?)`;
+    }
+  } else if (unratedAvailable > 0) {
+    footerNote = `\n${unratedAvailable} problems excluded — no difficulty estimate (pass include_unrated to see them)`;
+  }
 
   if (page.length === 0) {
     const footer = buildFreshnessFooter({ source, upstreamCalls, partial: false });
     return {
-      content: [{ type: "text" as const, text: `No AtCoder problems found in difficulty range ${min_difficulty}–${max_difficulty}.\n\n${footer}` }],
-      structuredContent: { problems: [], source, upstreamCalls, partial: false },
+      content: [{ type: "text" as const, text: `No AtCoder problems found in difficulty range ${min_difficulty}–${max_difficulty}.\n\n${footer}${footerNote}` }],
+      structuredContent: { problems: [], source, upstreamCalls, partial: false, unratedAvailable, unratedShown, includeUnrated: include_unrated },
     };
   }
 
@@ -225,11 +293,11 @@ export async function handleSearchProblemsAtcoder(args: SearchProblemsAtcoderArg
     "",
     formatMarkdownTable(headers, rows),
     "",
-    footer,
+    `${footer}${footerNote}`,
   ].join("\n");
 
   return {
     content: [{ type: "text" as const, text }],
-    structuredContent: { problems: page, source, upstreamCalls, partial: false },
+    structuredContent: { problems: page, source, upstreamCalls, partial: false, unratedAvailable, unratedShown, includeUnrated: include_unrated },
   };
 }
