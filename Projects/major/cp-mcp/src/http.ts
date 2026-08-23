@@ -180,9 +180,24 @@ const isMain =
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(process.argv[1]).href;
 
+// This is about to run as a personal laptop daemon with CP_MCP_CF_HANDLE set —
+// resolveHandle (src/domain/config.ts) falls back to that env var, so every
+// caller who omits a handle silently gets the owner's. Binding all interfaces
+// would hand that handle-scoped server to anyone on the same network (cafe
+// wifi, campus LAN). Loopback is the safe default; LAN visibility is an
+// explicit opt-in via CP_MCP_HTTP_HOST=0.0.0.0.
+//
+// Read at listen time, not module load — same reasoning as CP_MCP_AUTH_TOKEN
+// above: tests and MCP clients set env vars after this module is imported.
+export function resolveBindHost(): string {
+  const host = process.env.CP_MCP_HTTP_HOST?.trim();
+  return host ? host : "127.0.0.1";
+}
+
 if (isMain) {
   const port = Number(process.env.PORT) || 3000;
-  serve({ fetch: app.fetch, port }, info => {
-    console.error(`cp-mcp http server listening on http://localhost:${info.port}`);
+  const hostname = resolveBindHost();
+  serve({ fetch: app.fetch, port, hostname }, info => {
+    console.error(`cp-mcp http server listening on http://${hostname}:${info.port}`);
   });
 }
