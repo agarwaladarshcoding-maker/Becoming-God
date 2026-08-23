@@ -63,7 +63,7 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
 
 ## Current State
 - **All planning docs (00-10) are written and complete**
-- **The server works over stdio** — 17 tools (16 CP tools + `ping`) implemented, 36/36 tests pass, `npx tsc --noEmit` clean
+- **The server works over stdio** — 17 tools (16 CP tools + `ping`) implemented, 50/50 tests pass across 9 files, `npx tsc --noEmit` clean
 - As of 2026-08-23, four defects that broke it in practice were found and fixed: the cache DB path was
   relative and failed under Claude Desktop's `cwd=/`; AtCoder difficulty was read from a JSON file that has
   no `difficulty` field (all 9,395 rows were `NULL`); AtCoder problem URLs pointed at the wrong contest for
@@ -80,8 +80,24 @@ Each of the following exists as `_codeforces` and `_atcoder` variants:
   registered — the AtCoder one had to be repointed from kenkoooo's `contests.json` (a historical archive
   with zero future contests) to scraping `atcoder.jp/contests/` directly. See `docs/progress.md`'s second
   2026-08-23 entry for the full list.
-- Wired into Claude Code via `.mcp.json` in this repo. Remote (Streamable HTTP) is built and functional
-  locally but **not deployed** — no Fly/tunnel, so Claude Web and Notion cannot reach it yet.
+- A third pass, also dated 2026-08-23, closed the remaining Tier 1 defects. `cp_search_problems_atcoder`
+  no longer silently drops the 4,610 AtCoder problems (of 9,395) that have no kenkoooo difficulty estimate —
+  it now always reports the exclusion count and offers `include_unrated: true` to return them (difficulty
+  shown as `?`, ranked after every real match). The Codeforces submission sync's hard 10,000-submission
+  ceiling — which looked like a clean finish and made the verifier print `✗ untouched` for solves outside
+  the cap — is gone, replaced by ending the loop on Codeforces's real short final page. The container now
+  builds and runs: a missing `.dockerignore` had been overwriting the image's Linux `node_modules` with
+  macOS binaries and baking the developer's `cache.db` into the image, and the base image is now
+  `node:22-slim` (see the Node requirement above; `better-sqlite3@13.0.3` segfaults under Node 20). The HTTP
+  endpoint can now be gated with `CP_MCP_AUTH_TOKEN`, accepted as either a secret path segment
+  (`/mcp/<token>`) or a `Bearer` header — the path form exists because claude.ai's custom-connector UI has
+  no field for a custom header. See `docs/progress.md`'s third 2026-08-23 entry for the full list.
+- Wired into Claude Code via `.mcp.json` in this repo. Remote (Streamable HTTP) is built, containerized, and
+  auth-gated — all verified locally, including a live probe of the auth gate against the built server — but
+  **still not deployed**. Creating the Fly app failed with `Error: We need your payment information to
+  continue!` (no card on the Fly account). This is ready-and-blocked-on-billing, not "not started": the
+  README documents the exact `flyctl` command sequence to run once that's resolved. Claude Web and Notion
+  cannot reach the server yet.
 - **`cp_upcoming_contests_*` (T7) are now implemented and registered.** `cp_contest_performance_*` (T8)
   remains unimplemented — out of scope for now.
 - **The M4 manual audit was run on 2026-08-23 and the Codeforces half passed 53/53.** Every row was checked

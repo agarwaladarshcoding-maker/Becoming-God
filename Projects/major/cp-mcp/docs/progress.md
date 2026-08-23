@@ -76,8 +76,11 @@ Milestones track against `docs/05-BUILD-PLAN.md`. Each task uses `[x]` (done) or
 - [x] ~~`src/bin/http.ts` with `express` + `SSEServerTransport`~~ — deleted 2026-08-23; deprecated SSE transport with a `pendingPost` race, abandoned rather than fixed
 - [x] Update `package.json` with `npm run serve`
 - [ ] ~~Update `README.md` with TryCloudflare / localtunnel instructions for Claude Web / Notion~~ — tunnel/SSE approach abandoned, not pending
+- [x] `.dockerignore` added, `npm prune --omit=dev` in `Dockerfile`, base image bumped to `node:22-slim` — image builds and the container serves `/health` returning `ok:true`
+- [x] `CP_MCP_AUTH_TOKEN` gate on `src/http.ts` — secret path (`/mcp/<token>`) or `Authorization: Bearer <token>`, probed live against the built server
+- [ ] **Deploy to Fly** — blocked: `flyctl apps create` fails with `Error: We need your payment information to continue!` (no card on the Fly account). Everything the deploy depends on is verified; nothing is hosted.
 
-**Gate:** Notion/Claude Web connects successfully to the public tunnel URL. — **False.** The SSE server this referred to has been deleted. The Streamable HTTP server it should have used (`src/http.ts`) had no listener at all — `node dist/http.js` exited 0 immediately, so nothing was ever served. As of 2026-08-23 a working Streamable HTTP entrypoint exists (`npm run serve`, `POST /mcp`, `/health`) but is **not deployed**. Remote clients (Claude Web/Notion) are consequently **not** connected — this is local-stdio-only for now, by decision.
+**Gate:** Notion/Claude Web connects successfully to the public tunnel URL. — **Still not met**, but for a different reason than before. The SSE server this referred to has been deleted, and the Streamable HTTP server that replaced it (`src/http.ts`) now has a real listener, a working container, and an auth gate — all verified locally and via `docker run`. What remains is purely external: the Fly app cannot be created without billing information on the account. **Not deployed. Ready, blocked on Fly billing, not a passed gate.**
 
 ---
 
@@ -179,6 +182,68 @@ to run that audit against, which happened later the same day (see M4 above and `
 
 ---
 
+## 2026-08-23 - Third pass: honest AtCoder search, an uncappable sync, and a deployable-but-undeployed server
+
+A third pass the same day, four commits on `cp-mcp-fixes`, closed the remaining Tier 1 defects: a search
+tool that silently hid half its catalogue by count (though not by ladder coverage), a submission sync that
+could never finish for a heavy account, and a container/auth setup that was necessary but not sufficient
+for a deploy.
+
+- **`cp_search_problems_atcoder` no longer hides unrated problems.** `WHERE difficulty >= ? AND difficulty
+  <= ?` never matches `NULL`, so all 4,610 of 9,395 AtCoder problems with no kenkoooo difficulty estimate
+  were dropped from every search, silently — the footer's `partial` stayed `false`. The earlier framing of
+  this as "half the AtCoder ladder is missing" overstated it: within ABC/ARC/AGC, the actual ladder,
+  coverage is **4,330 of 4,353 (99.5%)**. The 4,610 unrated problems are mostly **not** the ladder — 4,516
+  "other" (sponsored, university, `typical90`, `dp`, `practice`), plus 33 AGC, 29 ARC, 23 ABC. The real cost
+  was that curated practice sets were entirely unreachable: `dp_a` "Frog 1", the most-solved AtCoder problem
+  in existence at 91,360 solvers, could not be returned at any difficulty setting. Search now always names
+  the exclusion count in its footer, and a new `include_unrated` flag (default `false`) returns the unrated
+  rows with difficulty shown as `?`, ranked after every genuinely-matching row in a reserved ~20% share of
+  `limit` so they're reachable without ever outranking a real match. New tests in
+  `test/search_atcoder.test.ts`.
+- **The Codeforces submission sync had a hard ceiling of 10,000 submissions per handle**, and worse than
+  truncating silently, hitting the cap looked identical to a clean finish: the watermark was written and
+  `complete: true` came back for a history missing its oldest years, so the verifier printed `✗ untouched`
+  for solves it had never downloaded — the same class of confident-wrong answer the `unknown` status (second
+  pass, above) exists to prevent, surviving in a second place. It didn't bite this project's own
+  773-submission history, but it hit the M4 audit: tourist, Benq and jiangly all exceed 10,000 submissions,
+  which is why every audit row ended up on AdarshAg instead. Fixed by ending the loop on Codeforces's real
+  short final page (`page.length < count`) rather than the count; the numeric guard is raised to 200,000 and
+  demoted to a pure runaway guard, with the background continuation's own cap raised to match so the two
+  don't contradict each other.
+- **The container would not have run.** No `.dockerignore` existed, so `COPY . .` after `npm ci` overwrote
+  the image's freshly built Linux `node_modules` with 142 MB of this machine's macOS/arm64 binaries — a
+  native addon (`better-sqlite3`) built for the wrong platform — and baked the developer's 14 MB `cache.db`,
+  real submission history, into the image. Fixed, plus `npm prune --omit=dev` so the runtime image doesn't
+  ship TypeScript/vitest/eslint. That exposed a second, independent defect: `better-sqlite3@13.0.3` declares
+  `engines.node >= 22` and its prebuilds are built against that ABI; the Dockerfile pinned `node:20-slim`, so
+  the module loaded and then segfaulted the instant `new Database()` touched the file. Base image bumped to
+  `node:22-slim`; `package.json`'s `engines.node` corrected from `>=18.0.0` to `>=22.0.0` (a claim the
+  dependency tree could never honour); the CI matrix dropped `20.x`. **Node 22 is now a hard requirement**,
+  documented in the README's setup section. Verified: image builds, container serves `/health` returning
+  `ok:true` with no `better-sqlite3` error in the logs, `/app/cache.db` absent from the image.
+- **HTTP endpoint gated by `CP_MCP_AUTH_TOKEN`.** Unset, behaviour is unchanged. Set, a request is accepted
+  only via the secret path `/mcp/<token>` or `Authorization: Bearer <token>` on `/mcp` — both routes share
+  one handler so they can't drift — compared with `timingSafeEqual` so the token can't be recovered a byte
+  at a time, checked before the rate-limit counter increments so unauthenticated probes can't exhaust a real
+  caller's quota. `/health` stays open for Fly's checks. The secret-path form exists specifically because
+  claude.ai's custom-connector UI takes a URL plus optional OAuth credentials and has no field for a custom
+  header — a header-only gate would lock out the very client this deploy targets. That's a deliberate
+  trade-off: a capability URL can leak into proxy logs, acceptable here because the server is read-only over
+  public data, so a leak costs rate budget, not privacy. New tests in `test/http_auth.test.ts` covering
+  both credential forms and the unset/wrong-token cases.
+- **Still not deployed.** Everything the deploy depends on — image, auth gate, `fly.toml`, `CP_MCP_DB_PATH`
+  handling — is built and verified. Creating the Fly app itself failed:
+  `Error: We need your payment information to continue!` — no card on file on the Fly account. The exact
+  command sequence to run once that's resolved is in the README's Remote / HTTP section. Also documented
+  there: `CP_MCP_CF_HANDLE` must never be set on the eventual Fly deployment, since `resolveHandle` falls
+  back to it and would make every anonymous caller default to the owner's handle.
+- **Test count 41 → 50, across 9 files** (was 8).
+
+Tool count is unchanged at 17; none of this pass added or removed a tool.
+
+---
+
 ## Summary
 
 | Milestone | Status |
@@ -188,6 +253,6 @@ to run that audit against, which happened later the same day (see M4 above and `
 | M2 Cache + CF search | ✓ Done |
 | M3 AtCoder + unified model | ✓ Done — AtCoder difficulty fixed 2026-08-23 (was NULL, now populated); upcoming-contests tools (T7) registered 2026-08-23 |
 | M4 Verification + submissions | Tools done; `unknown` status added 2026-08-23 so absent history can't read as "not solved"; **manual audit run 2026-08-23 — Codeforces 53/53 against the site UI; AtCoder blocked by login wall** |
-| M5 Remote transport | Local stdio entrypoint fixed 2026-08-23; **not deployed**, remote clients not connected |
+| M5 Remote transport | Local stdio entrypoint fixed 2026-08-23; container image and auth gate built and verified 2026-08-23; **deploy ready, blocked on Fly billing** — not deployed, remote clients not connected |
 | M6 Analytics + publish | Resources fixed 2026-08-23 and now working; **not published to npm/MCP registry** |
 | M7 Hardening | ✓ Done |
