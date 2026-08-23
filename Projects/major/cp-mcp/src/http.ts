@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { serve } from "@hono/node-server";
 import { pathToFileURL } from "node:url";
+import { timingSafeEqual } from "node:crypto";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { buildServer } from "./server.js";
 import { getDb } from "./cache/db.js";
@@ -50,6 +52,38 @@ function checkGlobalBudget(): boolean {
   return true;
 }
 
+// Optional bearer-token / secret-path gate. CP_MCP_AUTH_TOKEN is read from
+// process.env at request time (not cached at module load) — same reasoning
+// as resolveHandle in src/domain/config.ts: tests and MCP clients set env
+// vars after this module is imported. Unset means the gate is off, so local
+// dev and every pre-existing test keep working unchanged.
+function constantTimeEqual(candidate: string, expected: string): boolean {
+  const a = Buffer.from(candidate);
+  const b = Buffer.from(expected);
+  // timingSafeEqual throws on a length mismatch; check first and fail
+  // closed rather than let it throw. The length check itself leaks nothing
+  // an attacker doesn't already know from the response latency of trying
+  // tokens of different lengths against a public endpoint.
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+function isAuthorized(req: Request, pathToken: string | undefined): boolean {
+  const expected = process.env.CP_MCP_AUTH_TOKEN;
+  if (!expected) return true;
+
+  if (pathToken && constantTimeEqual(pathToken, expected)) return true;
+
+  const authHeader = req.headers.get("authorization");
+  const prefix = "Bearer ";
+  if (authHeader && authHeader.startsWith(prefix)) {
+    const candidate = authHeader.slice(prefix.length);
+    if (constantTimeEqual(candidate, expected)) return true;
+  }
+
+  return false;
+}
+
 // Allowed origins — extend for production hosts as needed
 const ALLOWED_ORIGINS = new Set([
   "https://claude.ai",
@@ -86,13 +120,24 @@ app.get("/health", c => {
   });
 });
 
-app.all("/mcp", async c => {
+// Shared by both /mcp and /mcp/:token so the two routes cannot drift apart.
+async function handleMcpRequest(c: Context, pathToken: string | undefined): Promise<Response> {
   const req = c.req.raw;
 
   // HTTPS-only: reject plaintext in production (trust X-Forwarded-Proto from reverse proxy)
   const proto = req.headers.get("x-forwarded-proto");
   if (proto && proto !== "https") {
     return c.json({ error: "HTTPS required" }, 426);
+  }
+
+  // Auth gate — checked before the rate limit counter is incremented, so an
+  // unauthenticated probe cannot burn a legitimate caller's quota. A no-op
+  // when CP_MCP_AUTH_TOKEN is unset.
+  if (!isAuthorized(req, pathToken)) {
+    return c.json(
+      { error: "Unauthorized — supply the secret path segment (/mcp/<token>) or an Authorization: Bearer <token> header" },
+      401
+    );
   }
 
   // Origin validation
@@ -122,7 +167,10 @@ app.all("/mcp", async c => {
   newHeaders.set("X-RateLimit-Remaining", String(remaining));
   newHeaders.set("X-RateLimit-Limit", String(RATE_MAX_CALLS));
   return new Response(response.body, { status: response.status, headers: newHeaders });
-});
+}
+
+app.all("/mcp", c => handleMcpRequest(c, undefined));
+app.all("/mcp/:token", c => handleMcpRequest(c, c.req.param("token")));
 
 export default app;
 
