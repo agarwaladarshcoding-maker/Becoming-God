@@ -13,29 +13,21 @@ using namespace std;
 #define fast_io ios_base::sync_with_stdio(false); cin.tie(NULL); cout.tie(NULL)
 
 void solve() {
-    long long a;
-    long long b;
-    cin>>a>>b;
-    if (a==b)
-    {
-        cout<<0<<'\n';
-        return ;
+    long long n;
+    cin>>n;
+    vector<long long> arr(n);
+    for(int i = 0;i<n;i++){
+        cin>>arr[i];
     }
-    
-    vector<long long> ans;
-    long long base = 1;
-    while(b>0){
-        int lastBitb = (b&1);
-        int lastBitb= 
-        b>>=1;
-        base<<=1;
+    long long count = 0; 
+    for(int i = 0;i<n;i++){
+        for(int j = i+1;j<n;j++){
+            if(arr[j]<arr[i]){
+                count++;
+            }
+        }
     }
-    cout<<ans.size()<<'\n';
-    for(auto i : ans){
-        cout<<i<<' ';
-    }
-    cout<<'\n';
-
+    cout<<count<<'\n';
 }
 
 int main() {

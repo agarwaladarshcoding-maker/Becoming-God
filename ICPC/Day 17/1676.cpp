@@ -50,28 +50,27 @@ void solve()
         long long parentu = findparent(parents, u);
         long long parentv = findparent(parents, v);
 
-        if (parentu == parentv)
-            continue; // already same component — do nothing
-
-        if (size[parentu] < size[parentv])
+        // already same component — do nothing
+        if (parentu != parentv)
         {
-            maxi.first--;
-            parents[parentu] = parentv; // also: attach ROOT to ROOT, not u to v
-            size[parentv] += size[parentu];
-            maxi.second = max(maxi.second, size[parentv]);
-        }
+            if (size[parentu] < size[parentv])
+            {
+                maxi.first--;
+                parents[parentu] = parentv; // also: attach ROOT to ROOT, not u to v
+                size[parentv] += size[parentu];
+                maxi.second = max(maxi.second, size[parentv]);
+            }
 
-        else
-        {
-            maxi.first--;
-            parents[parentv] = parentu;
-            size[parentu] += size[parentv];
-            maxi.second = max(maxi.second, size[parentu]);
+            else
+            {
+                maxi.first--;
+                parents[parentv] = parentu;
+                size[parentu] += size[parentv];
+                maxi.second = max(maxi.second, size[parentu]);
+            }
         }
-        cout<<maxi.first<<' '<<maxi.second<<'\n';
-        
+        cout << maxi.first << ' ' << maxi.second << '\n';
     }
-    
 }
 
 int main()

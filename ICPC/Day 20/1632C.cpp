@@ -16,26 +16,23 @@ void solve() {
     long long a;
     long long b;
     cin>>a>>b;
-    if (a==b)
-    {
-        cout<<0<<'\n';
-        return ;
-    }
-    
-    vector<long long> ans;
-    long long base = 1;
-    while(b>0){
-        int lastBitb = (b&1);
-        int lastBitb= 
-        b>>=1;
-        base<<=1;
-    }
-    cout<<ans.size()<<'\n';
-    for(auto i : ans){
-        cout<<i<<' ';
-    }
-    cout<<'\n';
+    long long minOp = b- a;
 
+    for(int i = 0;i<=minOp;i++){
+        //case 1
+        long long aNew = a+i;
+        long long breq = aNew|b;
+        long long op1 = i + (breq-b) +1;
+
+        //case 2
+        long long bnew = b+i;
+        long long bFinal = a|bnew;
+        long long op2 = i + (bFinal- bnew) +1;
+        
+        minOp = min({op1, op2, minOp});
+        
+    }
+    cout<<minOp<<'\n';
 }
 
 int main() {

@@ -11,30 +11,16 @@
 using namespace std;
 
 #define fast_io ios_base::sync_with_stdio(false); cin.tie(NULL); cout.tie(NULL)
+const long long size_max = 2e5+ 5;
+vector<long long> adj[size_max];
+
+void dfs(int u, int p){
+
+
+    for(auto u : adj[])
+}
 
 void solve() {
-    long long a;
-    long long b;
-    cin>>a>>b;
-    if (a==b)
-    {
-        cout<<0<<'\n';
-        return ;
-    }
-    
-    vector<long long> ans;
-    long long base = 1;
-    while(b>0){
-        int lastBitb = (b&1);
-        int lastBitb= 
-        b>>=1;
-        base<<=1;
-    }
-    cout<<ans.size()<<'\n';
-    for(auto i : ans){
-        cout<<i<<' ';
-    }
-    cout<<'\n';
 
 }
 
